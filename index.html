@@ -810,7 +810,7 @@ const KEY = "tf_ose_data_v2"; // v2: update FAST_IMPROVEMENT 13-14 Juli 2026
 let storageOk = false;
 try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); storageOk = true; }catch(e){ storageOk = false; }
 let db;
-const FIREBASE_RTDB_PATH = "commandCenter";
+const FIREBASE_FS_PATH = { collection:"commandCenter", doc:"sharedState" };
 const firebaseConfig = {
   apiKey: "AIzaSyDEOQF16MaCBWt2AakKTExM298YZiFGcPo",
   authDomain: "task-force-ose-command-center.firebaseapp.com",
@@ -906,26 +906,26 @@ async function initFirebase(){
     const [
       { initializeApp },
       { getAnalytics, isSupported },
-      { getDatabase, ref, get, set }
+      { getFirestore, doc, getDoc, setDoc }
     ] = await Promise.all([
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js"),
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js"),
-      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js")
+      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js")
     ]);
     const app = initializeApp(firebaseConfig);
     isSupported().then(supported=>{ if(supported) getAnalytics(app); }).catch(()=>{});
-    const store = getDatabase(app);
+    const store = getFirestore(app);
     firebaseApi = {
-      get,
-      set,
-      stateRef: ref(store, FIREBASE_RTDB_PATH)
+      getDoc,
+      setDoc,
+      stateRef: doc(store, FIREBASE_FS_PATH.collection, FIREBASE_FS_PATH.doc)
     };
     firebaseState.status = "ready";
-    firebaseState.message = "Data dapat disinkronkan antar perangkat melalui Realtime Database.";
+    firebaseState.message = "Data dapat disinkronkan antar perangkat melalui Cloud Firestore.";
   }catch(e){
     firebaseApi = null;
     firebaseState.status = "error";
-    firebaseState.message = "Pastikan Realtime Database sudah aktif dan aturan aksesnya mengizinkan aplikasi ini.";
+    firebaseState.message = "Pastikan Cloud Firestore sudah aktif dan aturan aksesnya mengizinkan aplikasi ini.";
     console.warn("Firebase init gagal:", e);
   }
   renderStorageNote();
@@ -935,9 +935,9 @@ async function load(){
   let cloudData = null;
   if(firebaseApi){
     try{
-      const snap = await firebaseApi.get(firebaseApi.stateRef);
+      const snap = await firebaseApi.getDoc(firebaseApi.stateRef);
       if(snap.exists()){
-        const payload = snap.val();
+        const payload = snap.data();
         cloudData = deserializeStructuredDb(payload);
       }
     }catch(e){
@@ -1021,7 +1021,7 @@ function migrate(){
 async function pushCloudSnapshot(snapshot){
   if(!firebaseApi) return;
   try{
-    await firebaseApi.set(firebaseApi.stateRef, serializeStructuredDb(snapshot));
+    await firebaseApi.setDoc(firebaseApi.stateRef, serializeStructuredDb(snapshot));
     if(firebaseState.status!=="ready"){
       firebaseState.status = "ready";
       firebaseState.message = "Sinkronisasi cloud kembali aktif.";
@@ -1029,7 +1029,7 @@ async function pushCloudSnapshot(snapshot){
     }
   }catch(e){
     firebaseState.status = "error";
-    firebaseState.message = "Gagal mengirim perubahan ke Realtime Database, tetapi data lokal tetap tersimpan.";
+    firebaseState.message = "Gagal mengirim perubahan ke Cloud Firestore, tetapi data lokal tetap tersimpan.";
     renderStorageNote();
     console.warn("Firebase save gagal:", e);
     if(!firebaseToastShown){
