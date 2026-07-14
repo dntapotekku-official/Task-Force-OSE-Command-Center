@@ -810,7 +810,8 @@ const KEY = "tf_ose_data_v2"; // v2: update FAST_IMPROVEMENT 13-14 Juli 2026
 let storageOk = false;
 try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); storageOk = true; }catch(e){ storageOk = false; }
 let db;
-const FIREBASE_FS_PATH = { collection:"commandCenter", doc:"sharedState" };
+const FIREBASE_FS_ROOT = { collection:"commandCenter", doc:"app" };
+const FIREBASE_FS_LEGACY = { collection:"commandCenter", doc:"sharedState" };
 const firebaseConfig = {
   apiKey: "AIzaSyDEOQF16MaCBWt2AakKTExM298YZiFGcPo",
   authDomain: "task-force-ose-command-center.firebaseapp.com",
@@ -830,6 +831,18 @@ function createDefaultDb(){
 }
 function cloneData(data){
   return JSON.parse(JSON.stringify(data));
+}
+function stripUndefined(value){
+  if(Array.isArray(value)) return value.map(stripUndefined);
+  if(value && typeof value === "object"){
+    const out = {};
+    Object.keys(value).forEach(key=>{
+      const cleaned = stripUndefined(value[key]);
+      if(cleaned !== undefined) out[key] = cleaned;
+    });
+    return out;
+  }
+  return value === undefined ? undefined : value;
 }
 function serializeStructuredDb(data){
   const snapshot = cloneData(data || {});
@@ -863,6 +876,30 @@ function deserializeStructuredDb(payload){
     users: Array.isArray(payload.users) ? cloneData(payload.users) : [],
     meta: payload.meta && typeof payload.meta==="object" ? cloneData(payload.meta) : {visit:VISIT_LABEL}
   };
+}
+function serializeRootDoc(data){
+  return stripUndefined({
+    meta: cloneData(data.meta || {}),
+    kpiTargets: cloneData((data.kpi && data.kpi.targets) || {}),
+    schema: {
+      version: 2,
+      shape: "firestore-subcollections",
+      updatedAt: data.meta && data.meta.lastSavedAt ? data.meta.lastSavedAt : new Date().toISOString()
+    }
+  });
+}
+function toActsArray(acts){
+  return Object.entries(acts || {}).map(([id, value])=>({ id, ...cloneData(value) }));
+}
+function fromActsArray(rows){
+  const out = {};
+  (rows || []).forEach(row=>{
+    if(!row || !row.id) return;
+    const copy = cloneData(row);
+    delete copy.id;
+    out[row.id] = copy;
+  });
+  return out;
 }
 function renderStorageNote(){
   const note = $("#storageNote");
@@ -906,7 +943,7 @@ async function initFirebase(){
     const [
       { initializeApp },
       { getAnalytics, isSupported },
-      { getFirestore, doc, getDoc, setDoc }
+      { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc }
     ] = await Promise.all([
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js"),
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js"),
@@ -916,9 +953,14 @@ async function initFirebase(){
     isSupported().then(supported=>{ if(supported) getAnalytics(app); }).catch(()=>{});
     const store = getFirestore(app);
     firebaseApi = {
+      collection,
+      deleteDoc,
+      doc,
       getDoc,
+      getDocs,
       setDoc,
-      stateRef: doc(store, FIREBASE_FS_PATH.collection, FIREBASE_FS_PATH.doc)
+      rootRef: doc(store, FIREBASE_FS_ROOT.collection, FIREBASE_FS_ROOT.doc),
+      legacyRef: doc(store, FIREBASE_FS_LEGACY.collection, FIREBASE_FS_LEGACY.doc)
     };
     firebaseState.status = "ready";
     firebaseState.message = "Data dapat disinkronkan antar perangkat melalui Cloud Firestore.";
@@ -930,16 +972,56 @@ async function initFirebase(){
   }
   renderStorageNote();
 }
+async function fetchSubcollectionDocs(name){
+  const snap = await firebaseApi.getDocs(firebaseApi.collection(firebaseApi.rootRef, name));
+  return snap.docs.map(d=>({ id:d.id, ...d.data() }));
+}
+async function loadFirestoreDb(){
+  const rootSnap = await firebaseApi.getDoc(firebaseApi.rootRef);
+  if(rootSnap.exists()){
+    const root = rootSnap.data() || {};
+    const [items, audits, users, actsRows, kpiEntries] = await Promise.all([
+      fetchSubcollectionDocs("items"),
+      fetchSubcollectionDocs("audits"),
+      fetchSubcollectionDocs("users"),
+      fetchSubcollectionDocs("acts"),
+      fetchSubcollectionDocs("kpiEntries")
+    ]);
+    return {
+      meta: cloneData(root.meta || {visit:VISIT_LABEL}),
+      items: items.map(row=>cloneData(row)),
+      audits: audits.map(row=>cloneData(row)),
+      users: users.map(row=>cloneData(row)),
+      acts: fromActsArray(actsRows),
+      kpi: {
+        targets: cloneData(root.kpiTargets || {}),
+        entries: kpiEntries.map(row=>cloneData(row))
+      }
+    };
+  }
+  const legacySnap = await firebaseApi.getDoc(firebaseApi.legacyRef);
+  if(legacySnap.exists()) return deserializeStructuredDb(legacySnap.data());
+  return null;
+}
+async function syncSubcollection(name, rows){
+  const collRef = firebaseApi.collection(firebaseApi.rootRef, name);
+  const currentSnap = await firebaseApi.getDocs(collRef);
+  const existingIds = new Set(currentSnap.docs.map(d=>d.id));
+  const wantedIds = new Set(rows.map(row=>String(row.id)));
+  const writes = rows.map(row=>{
+    const payload = stripUndefined(cloneData(row));
+    const docId = String(payload.id);
+    return firebaseApi.setDoc(firebaseApi.doc(collRef, docId), payload);
+  });
+  const deletes = [...existingIds].filter(id=>!wantedIds.has(id)).map(id=>firebaseApi.deleteDoc(firebaseApi.doc(collRef, id)));
+  await Promise.all(writes.concat(deletes));
+}
 async function load(){
   const localData = getLocalSnapshot();
   let cloudData = null;
   if(firebaseApi){
     try{
-      const snap = await firebaseApi.getDoc(firebaseApi.stateRef);
-      if(snap.exists()){
-        const payload = snap.data();
-        cloudData = deserializeStructuredDb(payload);
-      }
+      cloudData = await loadFirestoreDb();
     }catch(e){
       firebaseState.status = "error";
       firebaseState.message = "Gagal membaca data cloud, sehingga aplikasi memakai data lokal terakhir.";
@@ -1021,7 +1103,14 @@ function migrate(){
 async function pushCloudSnapshot(snapshot){
   if(!firebaseApi) return;
   try{
-    await firebaseApi.setDoc(firebaseApi.stateRef, serializeStructuredDb(snapshot));
+    await firebaseApi.setDoc(firebaseApi.rootRef, serializeRootDoc(snapshot));
+    await Promise.all([
+      syncSubcollection("items", (snapshot.items || []).map(item=>({ id:item.id, ...item }))),
+      syncSubcollection("audits", (snapshot.audits || []).map(audit=>({ id:audit.k || audit.id, ...audit }))),
+      syncSubcollection("users", (snapshot.users || []).map(user=>({ id:user.id, ...user }))),
+      syncSubcollection("acts", toActsArray(snapshot.acts || {})),
+      syncSubcollection("kpiEntries", (((snapshot.kpi || {}).entries) || []).map(entry=>({ id:entry.k || entry.id, ...entry })))
+    ]);
     if(firebaseState.status!=="ready"){
       firebaseState.status = "ready";
       firebaseState.message = "Sinkronisasi cloud kembali aktif.";
