@@ -810,7 +810,7 @@ const KEY = "tf_ose_data_v2"; // v2: update FAST_IMPROVEMENT 13-14 Juli 2026
 let storageOk = false;
 try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); storageOk = true; }catch(e){ storageOk = false; }
 let db;
-const FIREBASE_RTDB_PATH = "commandCenter/sharedState";
+const FIREBASE_RTDB_PATH = "commandCenter";
 const firebaseConfig = {
   apiKey: "AIzaSyDEOQF16MaCBWt2AakKTExM298YZiFGcPo",
   authDomain: "task-force-ose-command-center.firebaseapp.com",
@@ -830,6 +830,39 @@ function createDefaultDb(){
 }
 function cloneData(data){
   return JSON.parse(JSON.stringify(data));
+}
+function serializeStructuredDb(data){
+  const snapshot = cloneData(data || {});
+  return {
+    meta: snapshot.meta || {},
+    items: snapshot.items || [],
+    audits: snapshot.audits || [],
+    acts: snapshot.acts || {},
+    kpi: snapshot.kpi || {targets:{}, entries:[]},
+    users: snapshot.users || [],
+    schema: {
+      version: 1,
+      shape: "structured-command-center",
+      updatedAt: snapshot.meta && snapshot.meta.lastSavedAt ? snapshot.meta.lastSavedAt : new Date().toISOString()
+    }
+  };
+}
+function deserializeStructuredDb(payload){
+  if(!payload || typeof payload !== "object") return null;
+  if(payload.data && typeof payload.data === "object") return cloneData(payload.data);
+  if(payload.sharedState && payload.sharedState.data && typeof payload.sharedState.data === "object"){
+    return cloneData(payload.sharedState.data);
+  }
+  const hasStructuredKeys = ["items","audits","acts","kpi","users","meta"].some(k=>Object.prototype.hasOwnProperty.call(payload, k));
+  if(!hasStructuredKeys) return null;
+  return {
+    items: Array.isArray(payload.items) ? cloneData(payload.items) : [],
+    audits: Array.isArray(payload.audits) ? cloneData(payload.audits) : [],
+    acts: payload.acts && typeof payload.acts==="object" ? cloneData(payload.acts) : {},
+    kpi: payload.kpi && typeof payload.kpi==="object" ? cloneData(payload.kpi) : {targets:{}, entries:[]},
+    users: Array.isArray(payload.users) ? cloneData(payload.users) : [],
+    meta: payload.meta && typeof payload.meta==="object" ? cloneData(payload.meta) : {visit:VISIT_LABEL}
+  };
 }
 function renderStorageNote(){
   const note = $("#storageNote");
@@ -905,7 +938,7 @@ async function load(){
       const snap = await firebaseApi.get(firebaseApi.stateRef);
       if(snap.exists()){
         const payload = snap.val();
-        if(payload && payload.data) cloudData = payload.data;
+        cloudData = deserializeStructuredDb(payload);
       }
     }catch(e){
       firebaseState.status = "error";
@@ -988,10 +1021,7 @@ function migrate(){
 async function pushCloudSnapshot(snapshot){
   if(!firebaseApi) return;
   try{
-    await firebaseApi.set(firebaseApi.stateRef, {
-      data: snapshot,
-      updatedAt: snapshot.meta && snapshot.meta.lastSavedAt ? snapshot.meta.lastSavedAt : new Date().toISOString()
-    });
+    await firebaseApi.set(firebaseApi.stateRef, serializeStructuredDb(snapshot));
     if(firebaseState.status!=="ready"){
       firebaseState.status = "ready";
       firebaseState.message = "Sinkronisasi cloud kembali aktif.";
