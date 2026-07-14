@@ -810,11 +810,12 @@ const KEY = "tf_ose_data_v2"; // v2: update FAST_IMPROVEMENT 13-14 Juli 2026
 let storageOk = false;
 try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); storageOk = true; }catch(e){ storageOk = false; }
 let db;
-const FIREBASE_DOC_PATH = { collection:"commandCenter", doc:"sharedState" };
+const FIREBASE_RTDB_PATH = "commandCenter/sharedState";
 const firebaseConfig = {
   apiKey: "AIzaSyDEOQF16MaCBWt2AakKTExM298YZiFGcPo",
   authDomain: "task-force-ose-command-center.firebaseapp.com",
   projectId: "task-force-ose-command-center",
+  databaseURL: "https://task-force-ose-command-center-default-rtdb.asia-southeast1.firebasedatabase.app",
   storageBucket: "task-force-ose-command-center.firebasestorage.app",
   messagingSenderId: "380412737055",
   appId: "1:380412737055:web:761de8e4ac6738b377c72a",
@@ -872,26 +873,26 @@ async function initFirebase(){
     const [
       { initializeApp },
       { getAnalytics, isSupported },
-      { getFirestore, doc, getDoc, setDoc }
+      { getDatabase, ref, get, set }
     ] = await Promise.all([
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js"),
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js"),
-      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js")
+      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js")
     ]);
     const app = initializeApp(firebaseConfig);
     isSupported().then(supported=>{ if(supported) getAnalytics(app); }).catch(()=>{});
-    const store = getFirestore(app);
+    const store = getDatabase(app);
     firebaseApi = {
-      getDoc,
-      setDoc,
-      stateRef: doc(store, FIREBASE_DOC_PATH.collection, FIREBASE_DOC_PATH.doc)
+      get,
+      set,
+      stateRef: ref(store, FIREBASE_RTDB_PATH)
     };
     firebaseState.status = "ready";
-    firebaseState.message = "Data dapat disinkronkan antar perangkat melalui Firestore.";
+    firebaseState.message = "Data dapat disinkronkan antar perangkat melalui Realtime Database.";
   }catch(e){
     firebaseApi = null;
     firebaseState.status = "error";
-    firebaseState.message = "Pastikan Firestore sudah dibuat dan aturan aksesnya mengizinkan aplikasi ini.";
+    firebaseState.message = "Pastikan Realtime Database sudah aktif dan aturan aksesnya mengizinkan aplikasi ini.";
     console.warn("Firebase init gagal:", e);
   }
   renderStorageNote();
@@ -901,9 +902,9 @@ async function load(){
   let cloudData = null;
   if(firebaseApi){
     try{
-      const snap = await firebaseApi.getDoc(firebaseApi.stateRef);
+      const snap = await firebaseApi.get(firebaseApi.stateRef);
       if(snap.exists()){
-        const payload = snap.data();
+        const payload = snap.val();
         if(payload && payload.data) cloudData = payload.data;
       }
     }catch(e){
@@ -987,7 +988,7 @@ function migrate(){
 async function pushCloudSnapshot(snapshot){
   if(!firebaseApi) return;
   try{
-    await firebaseApi.setDoc(firebaseApi.stateRef, {
+    await firebaseApi.set(firebaseApi.stateRef, {
       data: snapshot,
       updatedAt: snapshot.meta && snapshot.meta.lastSavedAt ? snapshot.meta.lastSavedAt : new Date().toISOString()
     });
@@ -998,7 +999,7 @@ async function pushCloudSnapshot(snapshot){
     }
   }catch(e){
     firebaseState.status = "error";
-    firebaseState.message = "Gagal mengirim perubahan ke Firestore, tetapi data lokal tetap tersimpan.";
+    firebaseState.message = "Gagal mengirim perubahan ke Realtime Database, tetapi data lokal tetap tersimpan.";
     renderStorageNote();
     console.warn("Firebase save gagal:", e);
     if(!firebaseToastShown){
