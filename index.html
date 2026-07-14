@@ -1,0 +1,2172 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Force Operational &amp; Service Excellence — Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --brand:#BE1F2D;
+  --brand-deep:#87141F;
+  --brand-darker:#6E0F18;
+  --brand-tint:#FBE9EA;
+  --ink:#241a1b;
+  --ink-soft:#5f5254;
+  --ink-faint:#9a8b8d;
+  --paper:#f8f4f3;
+  --card:#ffffff;
+  --line:#eadfde;
+  --teal:#0e6b5c;
+  --teal-deep:#0a4f45;
+  --teal-tint:#e3f0ed;
+  --amber:#dd9a2b;
+  --amber-tint:#fbf1dc;
+  --red:#c14a38;
+  --red-tint:#f9e7e3;
+  --blue:#2e6f9e;
+  --blue-tint:#e5eff6;
+  --green:#2e8b57;
+  --green-tint:#e4f2ea;
+  --violet:#6b5b9e;
+  --violet-tint:#edeaf6;
+  --radius:14px;
+  --shadow:0 1px 2px rgba(110,15,24,.05),0 6px 18px rgba(110,15,24,.06);
+  --font-display:'Space Grotesk',system-ui,sans-serif;
+  --font-body:'Inter',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--font-body);background:var(--paper);color:var(--ink);font-size:14.5px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink)}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+
+/* ======= App shell: sidebar kiri ======= */
+.shell{display:flex;min-height:100vh}
+.sidebar{width:250px;flex-shrink:0;background:linear-gradient(180deg,var(--brand-deep),var(--brand-darker));color:#fff;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.side-brand{display:flex;align-items:center;gap:11px;padding:18px 16px 14px;border-bottom:1px solid rgba(255,255,255,.14)}
+.brand-mark{width:56px;height:36px;flex-shrink:0;display:grid;place-items:center}
+.brand-mark svg{width:100%;height:100%;display:block}
+.side-brand h1{font-family:var(--font-display);font-size:14px;font-weight:600;letter-spacing:.2px;line-height:1.3}
+.side-brand p{font-size:10.5px;color:#f2cdd0;margin-top:2px;line-height:1.35}
+.side-nav{flex:1;padding:12px 10px;display:flex;flex-direction:column;gap:3px}
+.tab-btn{background:transparent;border:none;color:#f0c3c7;width:100%;padding:11px 13px;font-size:13.5px;font-weight:600;border-radius:10px;display:flex;align-items:center;gap:10px;text-align:left}
+.tab-btn:hover{color:#fff;background:rgba(255,255,255,.1)}
+.tab-btn.active{background:#fff;color:var(--brand-deep);box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.tab-btn .count{margin-left:auto;background:rgba(255,255,255,.18);padding:1px 8px;border-radius:99px;font-size:11px}
+.tab-btn.active .count{background:var(--brand);color:#fff}
+.side-user{padding:12px 12px 14px;border-top:1px solid rgba(255,255,255,.14)}
+.side-user .user-chip{width:100%;justify-content:flex-start;flex-wrap:wrap}
+.content{flex:1;min-width:0;display:flex;flex-direction:column}
+.ctop{background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:11px 22px;position:sticky;top:0;z-index:30;flex-wrap:wrap}
+.ctop .status-pill{background:var(--brand-tint);border:1px solid #f2ced1;color:var(--brand-deep)}
+.ctop .today{color:var(--ink-soft);margin-left:auto}
+#btnMenu{display:none;background:var(--brand);color:#fff;border:none;border-radius:9px;width:38px;height:36px;font-size:17px;flex-shrink:0}
+.side-backdrop{display:none;position:fixed;inset:0;background:rgba(30,8,10,.5);z-index:140}
+.side-backdrop.show{display:block}
+@media(max-width:920px){
+  .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:150;transform:translateX(-105%);transition:transform .25s ease;box-shadow:0 0 50px rgba(0,0,0,.3)}
+  .sidebar.open{transform:none}
+  #btnMenu{display:grid;place-items:center}
+}
+.status-pill{display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:99px;font-size:12.5px;font-weight:600}
+.status-pill .dot{width:10px;height:10px;border-radius:50%}
+.today{font-size:12.5px;text-align:right;line-height:1.35}
+.user-chip{display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);padding:6px 8px 6px 13px;border-radius:99px;font-size:12.5px;font-weight:600}
+.user-chip .role-tag{background:#fff;color:var(--brand-deep);font-size:10.5px;padding:1.5px 8px;border-radius:99px;letter-spacing:.3px}
+.user-chip button{background:rgba(255,255,255,.18);border:none;color:#fff;border-radius:99px;padding:4px 11px;font-size:11.5px;font-weight:700}
+.user-chip button:hover{background:rgba(255,255,255,.3)}
+
+main{width:100%;max-width:1280px;margin:0 auto;padding:24px 22px 80px}
+.view{display:none}
+.view.active{display:block;animation:fadeUp .25s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.section-title{font-family:var(--font-display);font-size:15px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:var(--ink-soft);display:flex;align-items:center;gap:10px;margin:26px 0 12px}
+.section-title::after{content:"";flex:1;height:1px;background:var(--line)}
+.section-title:first-child{margin-top:0}
+
+/* ======= KPI cards ======= */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px 13px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--kpi-c,var(--brand))}
+.kpi .lbl{font-size:11.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--ink-faint)}
+.kpi .val{font-family:var(--font-display);font-size:30px;font-weight:700;line-height:1.15;margin-top:2px;color:var(--kpi-c,var(--ink))}
+.kpi .sub{font-size:11.5px;color:var(--ink-soft);margin-top:1px}
+
+/* Completion hero */
+.hero-row{display:grid;grid-template-columns:1.15fr 2fr;gap:12px;margin-bottom:12px}
+@media(max-width:860px){.hero-row{grid-template-columns:1fr}}
+.hero-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow)}
+.big-pct{font-family:var(--font-display);font-size:52px;font-weight:700;line-height:1;color:var(--brand-deep)}
+.big-pct small{font-size:22px;color:var(--ink-faint);font-weight:600}
+.progress-track{height:12px;background:var(--paper);border:1px solid var(--line);border-radius:99px;overflow:hidden;margin-top:12px;display:flex}
+.progress-track .seg{height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:11px;font-size:12px;color:var(--ink-soft)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* Divisi bars */
+.divisi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.divisi-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:15px 17px;box-shadow:var(--shadow)}
+.divisi-card h4{font-family:var(--font-display);font-size:14px;font-weight:600;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.divisi-card h4 .n{font-size:20px}
+.divisi-card .meta{font-size:12px;color:var(--ink-soft);margin:3px 0 9px}
+
+/* ======= Outlet cards + signature temuan strip ======= */
+.outlet-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.outlet-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:17px 18px 15px;box-shadow:var(--shadow);cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}
+.outlet-card:hover{transform:translateY(-2px);box-shadow:0 4px 8px rgba(21,38,46,.08),0 12px 28px rgba(21,38,46,.1)}
+.outlet-card h3{font-family:var(--font-display);font-size:15.5px;font-weight:600;line-height:1.3;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.outlet-card .flag{font-size:16px}
+.outlet-card .nums{display:flex;gap:14px;margin:9px 0 11px;font-size:12px;color:var(--ink-soft)}
+.outlet-card .nums b{display:block;font-family:var(--font-display);font-size:19px;color:var(--ink);font-weight:700;line-height:1.2}
+.strip{display:flex;gap:2.5px;flex-wrap:wrap}
+.strip i{width:13px;height:13px;border-radius:3.5px;display:inline-block}
+.strip-caption{font-size:11px;color:var(--ink-faint);margin-top:8px}
+
+/* status colors */
+.c-open{background:#cdd8d5}
+.c-progress{background:var(--amber)}
+.c-done{background:var(--green)}
+.c-verified{background:var(--teal)}
+.c-overdue{background:var(--red)}
+
+/* ======= Toolbar / filters ======= */
+.toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.toolbar input[type=search]{flex:1;min-width:190px;padding:9px 13px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.toolbar select{padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.btn{border:none;border-radius:10px;padding:9px 15px;font-size:13.5px;font-weight:600;display:inline-flex;align-items:center;gap:7px;transition:filter .1s}
+.btn:hover{filter:brightness(1.06)}
+.btn-primary{background:var(--brand);color:#fff}
+.btn-ghost{background:var(--card);border:1px solid var(--line);color:var(--ink)}
+.btn-danger{background:var(--red-tint);color:var(--red);border:1px solid #ecc7bf}
+.btn-sm{padding:6px 11px;font-size:12.5px;border-radius:8px}
+
+/* ======= Findings table ======= */
+.table-wrap{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:auto;box-shadow:var(--shadow)}
+table{width:100%;border-collapse:collapse;font-size:13.2px;min-width:900px}
+thead th{position:sticky;top:0;background:var(--brand-deep);color:#f6dee0;text-align:left;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;padding:10px 12px;white-space:nowrap;z-index:2}
+tbody td{padding:10px 12px;border-top:1px solid var(--line);vertical-align:top}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--brand-tint)}
+tbody tr.overdue-row{background:#fdf3f1}
+tbody tr.overdue-row:hover{background:#fae7e3}
+.temuan-cell{max-width:340px}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2.5px 9px;border-radius:99px;font-size:11.2px;font-weight:600;white-space:nowrap}
+.chip-hg{background:var(--violet-tint);color:var(--violet)}
+.chip-ops{background:var(--blue-tint);color:var(--blue)}
+.chip-qic{background:var(--amber-tint);color:#9a6a12}
+.chip-none{background:#eef1f0;color:var(--ink-faint);border:1px dashed #c7d2cf}
+.chip-open{background:#eef1f0;color:var(--ink-soft)}
+.chip-progress{background:var(--amber-tint);color:#9a6a12}
+.chip-done{background:var(--green-tint);color:var(--green)}
+.chip-verified{background:var(--teal-tint);color:var(--teal-deep)}
+.chip-late{background:var(--red-tint);color:var(--red)}
+.muted{color:var(--ink-faint)}
+.due-soon{color:#9a6a12;font-weight:600}
+.due-late{color:var(--red);font-weight:700}
+
+/* ======= Priority tab ======= */
+.prio-card{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--red);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);margin-bottom:12px}
+.prio-card.warn{border-left-color:var(--amber)}
+.prio-card.ok{border-left-color:var(--green)}
+.prio-card h3{font-family:var(--font-display);font-size:16px;font-weight:600;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.crit-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.crit{font-size:12px;padding:3.5px 11px;border-radius:99px;font-weight:600}
+.crit.bad{background:var(--red-tint);color:var(--red)}
+.crit.warn{background:var(--amber-tint);color:#9a6a12}
+.crit.good{background:var(--green-tint);color:var(--green)}
+.prio-note{margin-top:10px;font-size:13px;color:var(--ink-soft)}
+.zoom-flag{background:var(--red);color:#fff;font-size:11.5px;font-weight:700;padding:3px 11px;border-radius:99px;letter-spacing:.3px}
+
+/* ======= Report ======= */
+.report-actions{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px}
+.report-sheet{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:34px 38px;max-width:900px}
+.report-sheet h2{font-family:var(--font-display);font-size:21px;font-weight:700;letter-spacing:.2px}
+.report-sheet .rpt-sub{color:var(--ink-soft);font-size:13px;margin-top:3px}
+.rpt-divider{height:3px;background:var(--brand);border:none;margin:14px 0 18px;border-radius:3px}
+.report-sheet h3{font-family:var(--font-display);font-size:14.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--brand-deep);margin:22px 0 9px}
+.report-sheet table{min-width:0;font-size:12.8px}
+.report-sheet thead th{background:var(--brand-tint);color:var(--brand-deep);position:static}
+.report-sheet p,.report-sheet li{font-size:13.4px}
+.report-sheet ul{padding-left:20px;margin:6px 0}
+.brief-box{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 22px;max-width:900px;margin-top:14px}
+.brief-box pre{white-space:pre-wrap;font-family:var(--font-body);font-size:13.4px;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;max-height:480px;overflow:auto}
+
+/* ======= Modal ======= */
+.modal-back{position:fixed;inset:0;background:rgba(13,28,25,.55);display:none;align-items:flex-start;justify-content:center;padding:34px 16px;z-index:50;overflow:auto}
+.modal-back.open{display:flex}
+.modal{background:#fff;border-radius:16px;width:100%;max-width:680px;box-shadow:0 24px 70px rgba(0,0,0,.28);animation:fadeUp .2s ease}
+.modal-head{padding:17px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px}
+.modal-head h3{font-family:var(--font-display);font-size:16.5px;font-weight:600}
+.modal-body{padding:20px 22px;display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.modal-body .full{grid-column:1/-1}
+@media(max-width:620px){.modal-body{grid-template-columns:1fr}}
+.field label{display:block;font-size:11.5px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px}
+.field input,.field select,.field textarea{width:100%;padding:8.5px 11px;border:1px solid var(--line);border-radius:9px;background:#fff}
+.field textarea{resize:vertical;min-height:64px}
+.modal-foot{padding:15px 22px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.x-btn{background:none;border:none;font-size:22px;color:var(--ink-faint);line-height:1}
+.hist{grid-column:1/-1;font-size:12px;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:10px 13px;max-height:120px;overflow:auto}
+.hist div{padding:2px 0}
+.photo-thumb{max-width:100%;max-height:150px;border-radius:9px;border:1px solid var(--line);margin-top:7px;display:block}
+
+/* ======= Data tab ======= */
+.data-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:13px}
+.data-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
+.data-card h4{font-family:var(--font-display);font-size:15px;margin-bottom:6px}
+.data-card p{font-size:12.8px;color:var(--ink-soft);margin-bottom:12px}
+.storage-note{margin-top:16px;font-size:12.5px;color:var(--ink-soft);background:var(--blue-tint);border:1px solid #cfe0ee;border-radius:10px;padding:11px 15px;max-width:760px}
+.storage-note.warn{background:var(--amber-tint);border-color:#ecd9ae}
+
+/* ======= Review Rutin ======= */
+.act-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px}
+.act-sum-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}
+.act-sum-card h4{font-family:var(--font-display);font-size:13px;font-weight:600;color:var(--ink-soft)}
+.act-sum-card .big{font-family:var(--font-display);font-size:26px;font-weight:700;margin-top:2px}
+.act-sum-card .sub{font-size:11.5px;color:var(--ink-faint)}
+.act-group{margin-bottom:22px}
+.act-row{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:13px 16px;box-shadow:var(--shadow);margin-bottom:9px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.act-info{flex:1;min-width:220px}
+.act-info h4{font-family:var(--font-display);font-size:14.5px;font-weight:600}
+.act-info .chips{display:flex;gap:6px;margin-top:5px;flex-wrap:wrap}
+.chip-all{background:var(--brand-tint);color:var(--brand-deep)}
+.chip-freq{background:#eef1f0;color:var(--ink-soft)}
+.act-strip{display:flex;gap:4px;align-items:flex-end}
+.pcell{width:26px;height:26px;border-radius:7px;border:1.5px solid transparent;background:#e6ecea;cursor:pointer;position:relative;display:grid;place-items:center;font-size:12px;transition:transform .1s}
+.pcell:hover{transform:scale(1.12)}
+.pcell.done{background:var(--green);color:#fff}
+.pcell.missed{background:var(--red-tint);border-color:#e6b3a9}
+.pcell.current{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-tint)}
+.pcell .plbl{position:absolute;bottom:-15px;font-size:8.5px;color:var(--ink-faint);white-space:nowrap}
+.act-strip-wrap{padding-bottom:14px}
+.act-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-soft);margin:4px 0 16px}
+.act-legend .pcell{cursor:default;width:18px;height:18px}
+.act-legend .pcell:hover{transform:none}
+.act-legend span{display:inline-flex;align-items:center;gap:6px}
+
+/* ======= KPI ======= */
+.kpi-mon-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:13px}
+.kpi-mon{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 17px 13px;box-shadow:var(--shadow);border-top:4px solid var(--kc,var(--brand))}
+.kpi-mon h4{font-family:var(--font-display);font-size:14.5px;font-weight:600;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.kpi-mon .val-row{display:flex;align-items:baseline;gap:9px;margin:7px 0 3px}
+.kpi-mon .val{font-family:var(--font-display);font-size:33px;font-weight:700;line-height:1}
+.kpi-mon .delta{font-size:12px;font-weight:600}
+.kpi-mon .target-row{font-size:12px;color:var(--ink-soft);display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.kpi-mon .target-row input{width:64px;padding:3px 7px;border:1px solid var(--line);border-radius:7px;font-size:12px}
+.kpi-mon svg{width:100%;height:44px;display:block}
+.kpi-mon .last-date{font-size:11px;color:var(--ink-faint);margin-top:6px}
+.kpi-hist-tools{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin:20px 0 12px}
+.del-entry{background:none;border:none;color:var(--red);font-size:15px;padding:2px 6px}
+
+/* ======= Login & Akun ======= */
+.login-back{position:fixed;inset:0;background:linear-gradient(160deg,var(--brand-deep),var(--brand-darker));display:none;align-items:center;justify-content:center;padding:20px;z-index:200}
+.login-back.open{display:flex}
+.login-card{background:#fff;border-radius:20px;padding:34px 34px 28px;width:100%;max-width:420px;box-shadow:0 30px 80px rgba(0,0,0,.4);text-align:center}
+.login-card .lg{width:96px;margin:0 auto 10px;display:block}
+.login-card h2{font-family:var(--font-display);font-size:19px;font-weight:700;letter-spacing:1.5px;color:var(--brand-deep)}
+.login-card .tg{font-size:12px;font-style:italic;color:var(--ink-faint);margin-bottom:4px}
+.login-card p.sub{font-size:13px;color:var(--ink-soft);margin:8px 0 18px}
+.login-card .field{text-align:left;margin-bottom:12px}
+.login-err{color:var(--red);font-size:12.5px;font-weight:600;min-height:18px;margin:4px 0 6px}
+.login-note{font-size:11.5px;color:var(--ink-faint);margin-top:14px;line-height:1.5}
+.acct-scope{font-size:12px;color:var(--ink-soft)}
+select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--ink-faint);cursor:not-allowed}
+
+/* Toast */
+#toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:11px 20px;border-radius:99px;font-size:13.5px;font-weight:600;opacity:0;pointer-events:none;transition:all .25s ease;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.empty{padding:44px 20px;text-align:center;color:var(--ink-faint);font-size:14px}
+
+/* ======= Print ======= */
+@media print{
+  body{background:#fff}
+  .sidebar,.ctop,.side-backdrop,.report-actions,.toolbar,#toast,.brief-box,.login-back{display:none!important}
+  main{padding:0;max-width:none}
+  .view{display:none!important}
+  #view-laporan{display:block!important}
+  .report-sheet{border:none;box-shadow:none;padding:0;max-width:none}
+  thead th{background:#FBE9EA!important;color:#87141F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .chip,.crit,.progress-track .seg,.strip i{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  tr{page-break-inside:avoid}
+}
+@media(max-width:640px){
+  .report-sheet{padding:22px 18px}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar" id="sidebar">
+  <div class="side-brand">
+    <div class="brand-mark"><svg viewBox="0 0 200 104" xmlns="http://www.w3.org/2000/svg" aria-label="Logo APOTEKKU">
+        <rect x="6" y="6" width="188" height="92" rx="46" fill="var(--brand)" stroke="#fff" stroke-width="7"/>
+        <path d="M104,20 H142 A32,32 0 0 1 142,84 H104 Z" fill="#fff"/>
+        <rect x="46" y="26" width="18" height="52" fill="#fff"/>
+        <rect x="29" y="43" width="52" height="18" fill="#fff"/>
+      </svg></div>
+    <div>
+      <h1>Task Force Operational &amp; Service Excellence</h1>
+      <p>APOTEKKU Command Center<br>#solusikesehatankeluarga</p>
+    </div>
+  </div>
+  <nav class="side-nav">
+    <button class="tab-btn active" data-view="dashboard">📊 Dashboard</button>
+    <button class="tab-btn" data-view="temuan">📋 Temuan &amp; CAPA <span class="count" id="cntTemuan">0</span></button>
+    <button class="tab-btn" data-view="prioritas">🚨 Outlet Prioritas <span class="count" id="cntPrio">0</span></button>
+    <button class="tab-btn" data-view="review">🔁 Review Rutin <span class="count" id="cntAct">0</span></button>
+    <button class="tab-btn" data-view="kpi">🎯 KPI Team <span class="count" id="cntKpi">0</span></button>
+    <button class="tab-btn" data-view="laporan">📄 Laporan CEO</button>
+    <button class="tab-btn" data-view="data">⚙️ Data</button>
+  </nav>
+  <div class="side-user">
+    <div class="user-chip" id="userChip" style="display:none">
+      <span id="userName">—</span><span class="role-tag" id="userRole">—</span>
+      <button id="btnPass" title="Ubah password saya">🔑</button>
+      <button id="btnLogout" title="Keluar dari akun">Keluar</button>
+    </div>
+  </div>
+</aside>
+<div class="side-backdrop" id="sideBackdrop"></div>
+
+<div class="content">
+<header class="ctop">
+  <button id="btnMenu" aria-label="Buka menu">☰</button>
+  <div class="status-pill"><span class="dot" id="overallDot"></span><span id="overallText">—</span></div>
+  <div class="today" id="todayText"></div>
+</header>
+
+<main>
+
+<!-- ================= DASHBOARD ================= -->
+<section class="view active" id="view-dashboard">
+  <div class="hero-row">
+    <div class="hero-card">
+      <div class="lbl" style="font-size:11.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--ink-faint)">Penyelesaian Keseluruhan</div>
+      <div class="big-pct"><span id="heroPct">0</span><small>%</small></div>
+      <div class="progress-track" id="heroTrack"></div>
+      <div class="legend">
+        <span><i class="c-open"></i>Open</span>
+        <span><i class="c-progress"></i>On Progress</span>
+        <span><i class="c-done"></i>Selesai</span>
+        <span><i class="c-verified"></i>Terverifikasi</span>
+        <span><i class="c-overdue"></i>Overdue</span>
+      </div>
+    </div>
+    <div class="kpi-grid" id="kpiGrid"></div>
+  </div>
+
+  <div class="section-title">Beban &amp; Progres per Tim</div>
+  <div class="divisi-row" id="divisiRow"></div>
+
+  <div class="section-title">Status per Outlet <span style="text-transform:none;font-weight:500;letter-spacing:0;color:var(--ink-faint);font-size:12px">— setiap kotak = 1 temuan, klik kartu untuk detail</span></div>
+  <div class="outlet-grid" id="outletGrid"></div>
+
+  <div class="section-title">Perlu Perhatian Segera</div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Outlet</th><th>Temuan</th><th>Tim</th><th>PIC</th><th>Deadline</th><th>Status</th></tr></thead>
+    <tbody id="urgentBody"></tbody>
+  </table></div>
+</section>
+
+<!-- ================= TEMUAN ================= -->
+<section class="view" id="view-temuan">
+  <div class="toolbar">
+    <input type="search" id="fSearch" placeholder="Cari temuan, PIC, tindakan…">
+    <select id="fOutlet"><option value="">Semua Outlet</option></select>
+    <select id="fDivisi">
+      <option value="">Semua Tim</option>
+      <option value="HGPGA">HGPGA</option>
+      <option value="OPS">Operational &amp; GPP</option>
+      <option value="QIC">QI &amp; Compliance</option>
+      <option value="NONE">⚠ Belum ditetapkan</option>
+    </select>
+    <select id="fStatus">
+      <option value="">Semua Status</option>
+      <option value="open">Open</option>
+      <option value="progress">On Progress</option>
+      <option value="done">Selesai</option>
+      <option value="verified">Terverifikasi</option>
+      <option value="overdue">🔴 Overdue</option>
+    </select>
+    <select id="fSort">
+      <option value="default">Urutan: Outlet</option>
+      <option value="deadline">Urutan: Deadline terdekat</option>
+      <option value="status">Urutan: Status</option>
+      <option value="updated">Urutan: Update terbaru</option>
+    </select>
+    <button class="btn btn-primary" id="btnAdd">＋ Tambah Temuan</button>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr>
+      <th style="width:34px">No</th><th>Outlet</th><th>Temuan</th><th>Tim</th><th>Corrective Action</th><th>PIC</th><th>Deadline</th><th>Status</th>
+    </tr></thead>
+    <tbody id="temuanBody"></tbody>
+  </table></div>
+  <p class="muted" id="temuanCount" style="margin-top:9px;font-size:12.5px"></p>
+</section>
+
+<!-- ================= PRIORITAS ================= -->
+<section class="view" id="view-prioritas">
+  <p style="max-width:820px;color:var(--ink-soft);margin-bottom:16px">Outlet diprioritaskan otomatis berdasarkan kriteria task force: progres penyelesaian rendah, temuan overdue, temuan tanpa tim penanggung jawab, dan temuan tanpa PIC. Outlet dengan flag <b>Zoom Review</b> memenuhi kriteria untuk direview bersama seluruh insan outlet, leader, area/regional, dan tiga tim task force.</p>
+  <div id="prioList"></div>
+</section>
+
+<!-- ================= REVIEW RUTIN ================= -->
+<section class="view" id="view-review">
+  <div class="act-summary" id="actSummary"></div>
+
+  <div class="section-title">Audit Outlet</div>
+  <p style="max-width:860px;color:var(--ink-soft);margin-bottom:12px">Setiap audit dicatat <b>per outlet</b>: outlet mana yang diaudit, tim mana yang melaksanakan, dan bagaimana hasilnya. Hasil audit berstatus <b>Ada Temuan</b> atau <b>Kritis</b> dapat langsung dijadikan temuan CAPA di tab Temuan &amp; CAPA.</p>
+  <div class="crit-list" id="auditTypeChips" style="margin-bottom:13px"></div>
+  <div class="toolbar">
+    <button class="btn btn-primary" id="btnAuditAdd">＋ Catat Audit</button>
+    <select id="fAudType"><option value="">Semua Jenis Audit</option></select>
+    <select id="fAudTeam">
+      <option value="">Semua Tim Pelaksana</option>
+      <option value="OPS">Operational &amp; GPP</option>
+      <option value="QIC">QI &amp; Compliance</option>
+      <option value="HGPGA">HGPGA</option>
+    </select>
+    <select id="fAudResult">
+      <option value="">Semua Hasil</option>
+      <option value="baik">🟢 Baik</option>
+      <option value="temuan">🟡 Ada Temuan</option>
+      <option value="kritis">🔴 Kritis</option>
+    </select>
+    <input type="search" id="fAudSearch" placeholder="Cari outlet / auditor / catatan…">
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Tanggal</th><th>Jenis Audit</th><th>Outlet</th><th>Tim</th><th>Auditor</th><th style="text-align:right">Skor</th><th>Hasil</th><th>Temuan / Catatan</th><th></th></tr></thead>
+    <tbody id="auditBody"></tbody>
+  </table></div>
+  <p class="muted" id="auditCount" style="margin-top:9px;font-size:12.5px"></p>
+
+  <div class="section-title">Checklist Review Bersama</div>
+  <p style="max-width:840px;color:var(--ink-soft);margin-bottom:12px">Kegiatan review yang dilakukan bersama sesuai jadwalnya. Klik kotak periode untuk mencatat pelaksanaan. Kotak berbingkai adalah <b>periode berjalan</b>.</p>
+  <div class="act-legend">
+    <span><span class="pcell done">✓</span>Terlaksana</span>
+    <span><span class="pcell"></span>Belum (periode berjalan/akan datang)</span>
+    <span><span class="pcell missed">✕</span>Terlewat</span>
+    <span><span class="pcell current"></span>Periode berjalan</span>
+  </div>
+  <div class="toolbar">
+    <select id="fActDivisi">
+      <option value="">Semua Tim</option>
+      <option value="OPS">Operational &amp; GPP</option>
+      <option value="QIC">QI &amp; Compliance</option>
+      <option value="HGPGA">HGPGA</option>
+      <option value="ALL">Seluruh Tim</option>
+    </select>
+  </div>
+  <div id="actGroups"></div>
+</section>
+
+<!-- ================= KPI ================= -->
+<section class="view" id="view-kpi">
+  <div class="toolbar">
+    <button class="btn btn-primary" id="btnKpiAdd">＋ Input Nilai KPI</button>
+    <span class="muted" style="font-size:12.5px">Target dapat diubah langsung pada setiap kartu · status mengikuti target</span>
+  </div>
+  <div class="kpi-mon-grid" id="kpiMonGrid"></div>
+  <div class="kpi-hist-tools">
+    <div class="section-title" style="margin:0;flex:1">Riwayat Input KPI</div>
+    <select id="fKpiHist"><option value="">Semua KPI</option></select>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Tanggal</th><th>KPI</th><th style="text-align:right">Nilai</th><th style="text-align:right">Target</th><th>Status</th><th>Catatan</th><th></th></tr></thead>
+    <tbody id="kpiHistBody"></tbody>
+  </table></div>
+</section>
+
+<!-- ================= LAPORAN ================= -->
+<section class="view" id="view-laporan">
+  <div class="report-actions">
+    <button class="btn btn-primary" onclick="window.print()">🖨️ Cetak / Simpan PDF</button>
+    <button class="btn btn-ghost" id="btnBrief">📝 Buat Morning Brief (teks)</button>
+    <button class="btn btn-ghost" id="btnCopyBrief" style="display:none">📋 Salin ke Clipboard</button>
+  </div>
+  <div class="report-sheet" id="reportSheet"></div>
+  <div class="brief-box" id="briefBox" style="display:none">
+    <h3 style="font-family:var(--font-display);margin-bottom:10px">Operational &amp; Service Excellence — Morning Brief</h3>
+    <pre id="briefText"></pre>
+  </div>
+</section>
+
+<!-- ================= DATA ================= -->
+<section class="view" id="view-data">
+  <div class="data-grid">
+    <div class="data-card">
+      <h4>💾 Ekspor Data (JSON)</h4>
+      <p>Unduh seluruh data sebagai file JSON untuk backup atau dibagikan ke manager lain.</p>
+      <button class="btn btn-primary" id="btnExportJson">Unduh JSON</button>
+    </div>
+    <div class="data-card">
+      <h4>📥 Impor Data (JSON)</h4>
+      <p>Muat file JSON hasil ekspor. Data saat ini akan diganti.</p>
+      <input type="file" id="importFile" accept=".json" style="display:none">
+      <button class="btn btn-ghost" onclick="document.getElementById('importFile').click()">Pilih File JSON</button>
+    </div>
+    <div class="data-card">
+      <h4>📊 Ekspor Excel (CSV)</h4>
+      <p>Unduh tabel temuan &amp; CAPA dalam format CSV yang bisa dibuka di Excel.</p>
+      <button class="btn btn-ghost" id="btnExportCsv">Unduh CSV</button>
+    </div>
+    <div class="data-card">
+      <h4>♻️ Reset ke Data Awal</h4>
+      <p>Kembalikan ke baseline 70 temuan (kunjungan CEO + update FAST_IMPROVEMENT 13–14 Juli 2026). Seluruh perubahan setelahnya akan hilang.</p>
+      <button class="btn btn-danger" id="btnReset">Reset Data</button>
+    </div>
+  </div>
+  <div id="accountSection" style="display:none">
+    <div class="section-title" style="margin-top:26px">Akun &amp; Akses (khusus Admin)</div>
+    <p style="max-width:840px;color:var(--ink-soft);margin-bottom:12px">Seluruh <b>82 outlet</b> sudah otomatis dibuatkan akun: <b>username = nama outlet sesuai akun BSC</b> (contoh: APOTEKKU 9 RENON) dengan <b>password default: apotekku</b>. Akun SSC/Divisi: <b>ops</b>, <b>qic</b>, <b>hgpga</b>. Akun outlet hanya dapat melihat &amp; meng-update temuan outletnya sendiri — tidak dapat mengubah tim, menghapus temuan, atau memverifikasi (verifikasi hanya oleh QI &amp; C / Admin). Setiap pengguna dapat mengubah password sendiri lewat tombol 🔑.</p>
+    <div class="toolbar"><button class="btn btn-primary" id="btnUserAdd">＋ Tambah Akun</button></div>
+    <div class="toolbar" style="margin-top:0">
+      <input type="search" id="fUserSearch" placeholder="Cari akun / username / outlet…" style="flex:1;min-width:190px;padding:9px 13px;border:1px solid var(--line);border-radius:10px;background:var(--card)">
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Username</th><th>Nama</th><th>Peran</th><th>Cakupan Akses</th><th>Password</th><th></th></tr></thead>
+      <tbody id="userBody"></tbody>
+    </table></div>
+    <p class="muted" style="margin-top:9px;font-size:12.5px" id="userCount"></p>
+  </div>
+  <div class="storage-note" id="storageNote"></div>
+</section>
+
+</main>
+</div><!-- /.content -->
+</div><!-- /.shell -->
+
+<!-- ================= MODAL ================= -->
+<div class="modal-back" id="modalBack">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3 id="modalTitle">Detail Temuan</h3>
+      <button class="x-btn" id="modalClose" aria-label="Tutup">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field full"><label>Nama Outlet</label>
+        <input list="outletList" id="mOutlet" placeholder="Nama outlet">
+        <datalist id="outletList"></datalist>
+      </div>
+      <div class="field full"><label>Temuan</label><textarea id="mTemuan"></textarea></div>
+      <div class="field full"><label>Foto Temuan (kondisi sebelum perbaikan)</label>
+        <input type="file" id="mFotoTemuan" accept="image/*">
+        <img id="mFotoTemuanPrev" class="photo-thumb" style="display:none" alt="Foto temuan">
+      </div>
+      <div class="field full"><label>Corrective Action — perbaikan langsung</label><textarea id="mCA" placeholder="Apa yang dilakukan untuk memperbaiki temuan ini?"></textarea></div>
+      <div class="field full"><label>Preventive Action — agar tidak berulang</label><textarea id="mPA" placeholder="Apa yang dilakukan agar temuan ini tidak terulang?"></textarea></div>
+      <div class="field"><label>Tim Penanggung Jawab</label>
+        <select id="mDivisi">
+          <option value="NONE">— Belum ditetapkan —</option>
+          <option value="HGPGA">Human Growth Performance &amp; GA</option>
+          <option value="OPS">Operational &amp; GPP Excellence</option>
+          <option value="QIC">Quality Improvement &amp; Compliance</option>
+        </select>
+      </div>
+      <div class="field"><label>Status</label>
+        <select id="mStatus">
+          <option value="open">Open</option>
+          <option value="progress">On Progress</option>
+          <option value="done">Selesai</option>
+          <option value="verified">Terverifikasi (QI &amp; C)</option>
+        </select>
+      </div>
+      <div class="field"><label>PIC Internal</label><input id="mPic" placeholder="Nama PIC"></div>
+      <div class="field"><label>PIC Vendor (jika ada)</label><input id="mVendor" placeholder="Nama vendor"></div>
+      <div class="field"><label>Timeline / Deadline</label><input type="date" id="mTimeline"></div>
+      <div class="field"><label>Foto Bukti Perbaikan</label>
+        <input type="file" id="mFoto" accept="image/*">
+        <img id="mFotoPrev" class="photo-thumb" style="display:none" alt="Bukti perbaikan">
+      </div>
+      <div class="field full"><label>Catatan Progres</label><textarea id="mProgres" placeholder="Update terakhir, kendala, kebutuhan dukungan lintas tim…"></textarea></div>
+      <div class="field full"><label>Bukti Perbaikan (keterangan / link)</label><input id="mBukti" placeholder="Contoh: foto terlampir, link Google Drive, nomor dokumen"></div>
+      <div class="hist" id="mHist"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-danger btn-sm" id="btnDelete">Hapus Temuan</button>
+      <div style="display:flex;gap:9px">
+        <button class="btn btn-ghost" id="btnCancel">Batal</button>
+        <button class="btn btn-primary" id="btnSave">Simpan Perubahan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Review Rutin -->
+<div class="modal-back" id="actModalBack">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:480px">
+    <div class="modal-head"><h3 id="actModalTitle">Catat Pelaksanaan</h3><button class="x-btn" id="actModalClose" aria-label="Tutup">×</button></div>
+    <div class="modal-body" style="grid-template-columns:1fr">
+      <div class="field"><label>Status</label>
+        <select id="amStatus"><option value="done">✓ Terlaksana</option><option value="undone">Belum / batalkan tanda</option></select>
+      </div>
+      <div class="field"><label>PIC Pelaksana</label><input id="amPic" placeholder="Nama yang melaksanakan"></div>
+      <div class="field"><label>Catatan / Hasil Review</label><textarea id="amNote" placeholder="Temuan penting, angka, atau tindak lanjut dari review ini"></textarea></div>
+    </div>
+    <div class="modal-foot"><span></span><div style="display:flex;gap:9px">
+      <button class="btn btn-ghost" id="amCancel">Batal</button>
+      <button class="btn btn-primary" id="amSave">Simpan</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- Modal Audit -->
+<div class="modal-back" id="audModalBack">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:560px">
+    <div class="modal-head"><h3 id="audModalTitle">Catat Audit Outlet</h3><button class="x-btn" id="audModalClose" aria-label="Tutup">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Jenis Audit</label><select id="auType"></select></div>
+      <div class="field"><label>Tanggal Audit</label><input type="date" id="auDate"></div>
+      <div class="field full"><label>Outlet yang Diaudit</label>
+        <input list="masterOutletList" id="auOutlet" placeholder="Ketik untuk mencari outlet…">
+        <datalist id="masterOutletList"></datalist>
+      </div>
+      <div class="field"><label>Tim Pelaksana</label>
+        <select id="auTeam">
+          <option value="OPS">Operational &amp; GPP Excellence</option>
+          <option value="QIC">Quality Improvement &amp; Compliance</option>
+          <option value="HGPGA">Human Growth Performance &amp; GA</option>
+        </select>
+      </div>
+      <div class="field"><label>Auditor</label><input id="auAuditor" placeholder="Nama pelaksana audit"></div>
+      <div class="field"><label>Skor (opsional)</label><input type="number" step="0.01" id="auScore" placeholder="Contoh: 92"></div>
+      <div class="field"><label>Hasil Audit</label>
+        <select id="auResult">
+          <option value="baik">🟢 Baik — tidak ada temuan</option>
+          <option value="temuan">🟡 Ada Temuan</option>
+          <option value="kritis">🔴 Kritis</option>
+        </select>
+      </div>
+      <div class="field full"><label>Temuan / Catatan Hasil</label><textarea id="auNote" placeholder="Apa yang ditemukan saat audit? Sebutkan detail temuannya."></textarea></div>
+      <div class="field full"><label>Tindak Lanjut yang Disarankan</label><input id="auFollow" placeholder="Rekomendasi perbaikan / pencegahan"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-danger btn-sm" id="auDelete" style="display:none">Hapus Audit</button>
+      <div style="display:flex;gap:9px">
+        <button class="btn btn-ghost" id="auCancel">Batal</button>
+        <button class="btn btn-primary" id="auSave">Simpan Audit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal KPI -->
+<div class="modal-back" id="kpiModalBack">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:480px">
+    <div class="modal-head"><h3>Input Nilai KPI</h3><button class="x-btn" id="kpiModalClose" aria-label="Tutup">×</button></div>
+    <div class="modal-body" style="grid-template-columns:1fr 1fr">
+      <div class="field full"><label>KPI</label><select id="kmId"></select></div>
+      <div class="field"><label>Tanggal</label><input type="date" id="kmDate"></div>
+      <div class="field"><label>Nilai</label><input type="number" step="0.01" id="kmVal" placeholder="0"></div>
+      <div class="field full"><label>Catatan (opsional)</label><input id="kmNote" placeholder="Contoh: rata-rata 4 outlet, sumber data"></div>
+    </div>
+    <div class="modal-foot"><span></span><div style="display:flex;gap:9px">
+      <button class="btn btn-ghost" id="kmCancel">Batal</button>
+      <button class="btn btn-primary" id="kmSave">Simpan Nilai</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- Login -->
+<div class="login-back" id="loginBack">
+  <div class="login-card">
+    <svg class="lg" viewBox="0 0 200 104" xmlns="http://www.w3.org/2000/svg">
+      <rect x="6" y="6" width="188" height="92" rx="46" fill="#BE1F2D"/>
+      <path d="M104,20 H142 A32,32 0 0 1 142,84 H104 Z" fill="#fff"/>
+      <rect x="46" y="26" width="18" height="52" fill="#fff"/>
+      <rect x="29" y="43" width="52" height="18" fill="#fff"/></svg>
+    <h2>APOTEKKU</h2>
+    <div class="tg">#solusikesehatankeluarga</div>
+    <p class="sub">Task Force Operational &amp; Service Excellence<br>Masuk sesuai akun Anda</p>
+    <div class="field"><label>Username</label><input id="loginUser" autocomplete="username" placeholder="SSC: ops/qic/hgpga · Outlet: nama outlet sesuai akun BSC"></div>
+    <div class="field"><label>Password</label><input type="password" id="loginPin" autocomplete="current-password" placeholder="Password akun"></div>
+    <div class="login-err" id="loginErr"></div>
+    <button class="btn btn-primary" id="btnLogin" style="width:100%;justify-content:center;padding:11px">Masuk</button>
+    <div class="login-note"><b>SSC/Divisi:</b> username <b>ops</b> / <b>qic</b> / <b>hgpga</b><br><b>Outlet:</b> username = nama outlet sesuai akun BSC (contoh <b>APOTEKKU 9 RENON</b>)<br>Password default: <b>apotekku</b> · Admin: username <b>admin</b>, password awal <b>1234</b><br>Ubah password melalui tombol 🔑 setelah masuk.</div>
+  </div>
+</div>
+
+<!-- Modal Akun -->
+<div class="modal-back" id="userModalBack">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:480px">
+    <div class="modal-head"><h3 id="userModalTitle">Tambah Akun</h3><button class="x-btn" id="userModalClose" aria-label="Tutup">×</button></div>
+    <div class="modal-body" style="grid-template-columns:1fr">
+      <div class="field"><label>Nama Akun</label><input id="umName" placeholder="Contoh: Tim OPS, Outlet Kamasan, Bu Sari"></div>
+      <div class="field"><label>Peran</label>
+        <select id="umRole">
+          <option value="admin">Admin / Manager Task Force</option>
+          <option value="ssc">SSC — Divisi Task Force</option>
+          <option value="outlet">Outlet</option>
+        </select>
+      </div>
+      <div class="field" id="umDivisiWrap"><label>Divisi (untuk SSC)</label>
+        <select id="umDivisi">
+          <option value="OPS">Operational &amp; GPP Excellence</option>
+          <option value="QIC">Quality Improvement &amp; Compliance</option>
+          <option value="HGPGA">Human Growth Performance &amp; GA</option>
+        </select>
+      </div>
+      <div class="field" id="umOutletWrap" style="display:none"><label>Outlet (untuk akun outlet)</label>
+        <input list="masterOutletList" id="umOutlet" placeholder="Ketik untuk mencari outlet…">
+      </div>
+      <div class="field"><label>Username</label><input id="umUser" placeholder="Untuk outlet otomatis terisi kode outlet" autocomplete="off"></div>
+      <div class="field"><label>Password</label><input id="umPin" placeholder="Default: apotekku" autocomplete="off"></div>
+      <div class="field"><button class="btn btn-ghost btn-sm" id="umResetPass" type="button">↺ Reset password ke default (apotekku)</button></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-danger btn-sm" id="umDelete" style="display:none">Hapus Akun</button>
+      <div style="display:flex;gap:9px">
+        <button class="btn btn-ghost" id="umCancel">Batal</button>
+        <button class="btn btn-primary" id="umSave">Simpan Akun</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Ubah Password -->
+<div class="modal-back" id="passModalBack">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:420px">
+    <div class="modal-head"><h3>Ubah Password Saya</h3><button class="x-btn" id="passModalClose" aria-label="Tutup">×</button></div>
+    <div class="modal-body" style="grid-template-columns:1fr">
+      <div class="field"><label>Password Lama</label><input type="password" id="cpOld"></div>
+      <div class="field"><label>Password Baru</label><input type="password" id="cpNew" placeholder="Minimal 4 karakter"></div>
+      <div class="field"><label>Ulangi Password Baru</label><input type="password" id="cpNew2"></div>
+    </div>
+    <div class="modal-foot"><span></span><div style="display:flex;gap:9px">
+      <button class="btn btn-ghost" id="cpCancel">Batal</button>
+      <button class="btn btn-primary" id="cpSave">Simpan Password</button>
+    </div></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script>
+/* ================= KONSTANTA ================= */
+const DIVISI = {
+  HGPGA:{name:"Human Growth Performance & GA", chip:"chip-hg", color:"#6b5b9e"},
+  OPS:{name:"Operational & GPP Excellence", chip:"chip-ops", color:"#2e6f9e"},
+  QIC:{name:"Quality Improvement & Compliance", chip:"chip-qic", color:"#dd9a2b"},
+  NONE:{name:"Belum ditetapkan", chip:"chip-none", color:"#8298a1"}
+};
+const STATUS = {
+  open:{label:"Open", chip:"chip-open", cls:"c-open"},
+  progress:{label:"On Progress", chip:"chip-progress", cls:"c-progress"},
+  done:{label:"Selesai", chip:"chip-done", cls:"c-done"},
+  verified:{label:"Terverifikasi", chip:"chip-verified", cls:"c-verified"}
+};
+const VISIT_LABEL = "Kunjungan CEO";
+DIVISI.ALL = {name:"Seluruh Tim Task Force", chip:"chip-all", color:"#BE1F2D"};
+
+/* ================= KEGIATAN REVIEW RUTIN ================= */
+const FREQ = {harian:{label:"Harian",cells:14}, mingguan:{label:"Mingguan",cells:8}, "2mingguan":{label:"2 Mingguan",cells:6}, bulanan:{label:"Bulanan",cells:6}};
+/* Kegiatan review bersama — checklist per periode */
+const ACTIVITIES = [
+  {id:"joblist", name:"Review Joblist", freq:"harian", divisi:"OPS"},
+  {id:"huddle", name:"Review Huddle & Operan Shift", freq:"harian", divisi:"OPS"},
+  {id:"trx", name:"Review Nilai Transaksi", freq:"harian", divisi:"HGPGA"},
+  {id:"bsc", name:"Review BSC Outlet", freq:"mingguan", divisi:"OPS"},
+  {id:"survei", name:"Survei Kepuasan Pelanggan", freq:"mingguan", divisi:"OPS"},
+  {id:"greview", name:"Review Google Review Negatif", freq:"mingguan", divisi:"OPS"},
+  {id:"gpp", name:"Review Good Pharmaceutical Practice", freq:"bulanan", divisi:"OPS"}
+];
+/* Audit — dicatat per outlet: outlet mana, oleh tim apa, dan hasilnya */
+const AUDIT_TYPES = [
+  {id:"cctv", name:"Audit CCTV", freq:"harian", divisi:"ALL"},
+  {id:"wa", name:"Audit WhatsApp", freq:"harian", divisi:"QIC"},
+  {id:"hg", name:"Audit Human Growth", freq:"harian", divisi:"HGPGA"},
+  {id:"video", name:"Audit Video Pelayanan", freq:"mingguan", divisi:"QIC"},
+  {id:"quick", name:"Quick Audit Operasional", freq:"2mingguan", divisi:"QIC"}
+];
+const AUD_RESULT = {
+  baik:{label:"Baik", chip:"chip-done", emoji:"🟢"},
+  temuan:{label:"Ada Temuan", chip:"chip-progress", emoji:"🟡"},
+  kritis:{label:"Kritis", chip:"chip-late", emoji:"🔴"}
+};
+
+/* ================= MASTER DATA OUTLET (dari BSC_ApotekKU_Outlets) ================= */
+const OUTLETS = [{"code":"APK-001","name":"APOTEKKU 9 RENON"},{"code":"APK-002","name":"APOTEKKU A.YANI DENPASAR"},{"code":"APK-003","name":"APOTEKKU BAJRA"},{"code":"APK-004","name":"APOTEKKU BATUBULAN"},{"code":"APK-005","name":"APOTEKKU BERABAN"},{"code":"APK-006","name":"APOTEKKU BYPASS"},{"code":"APK-007","name":"APOTEKKU GUNUNG AGUNG"},{"code":"APK-008","name":"APOTEKKU GUNUNG SANGHYANG"},{"code":"APK-009","name":"APOTEKKU H P MUNGGU"},{"code":"APK-010","name":"APOTEKKU HP MUNGGU 2"},{"code":"APK-011","name":"APOTEKKU HP NO. 30 CANGGU"},{"code":"APK-012","name":"APOTEKKU HP NO. 32 KEROBOKAN"},{"code":"APK-013","name":"APOTEKKU HP NO. 38 PERERENAN"},{"code":"APK-014","name":"APOTEKKU HP NO. 40 BERAWA"},{"code":"APK-015","name":"APOTEKKU HP NO. 42 SEMER"},{"code":"APK-016","name":"APOTEKKU HP NO. 44 ULUWATU"},{"code":"APK-017","name":"APOTEKKU HP NO. 45 SANUR"},{"code":"APK-018","name":"APOTEKKU HP NO. 46 CAMPUHAN UBUD"},{"code":"APK-019","name":"APOTEKKU HP NO. 47 CAMPLUNG TANDUK"},{"code":"APK-020","name":"APOTEKKU HP NO. 48 MELASTI"},{"code":"APK-021","name":"APOTEKKU HP NO. 50 BYPASS SANUR"},{"code":"APK-022","name":"APOTEKKU HP NO. 53 HANOMAN UBUD"},{"code":"APK-023","name":"APOTEKKU HP NO. 60 JIMBARAN"},{"code":"APK-024","name":"APOTEKKU HP NO. 61 SEMINYAK"},{"code":"APK-025","name":"APOTEKKU HP NO. 63 TANJUNG BENOA"},{"code":"APK-026","name":"APOTEKKU HP NO. 69 DANAU TAMBLINGAN"},{"code":"APK-088","name":"APOTEKKU HP NO. 79 UBUD RAYA"},{"code":"APK-027","name":"APOTEKKU KAMASAN"},{"code":"APK-028","name":"APOTEKKU KITA NEGARA"},{"code":"APK-029","name":"APOTEKKU KITA SETIA"},{"code":"APK-030","name":"APOTEKKU KITA SIDHIKARYA"},{"code":"APK-031","name":"APOTEKKU KITA UBUNG"},{"code":"APK-032","name":"APOTEKKU KURNIA"},{"code":"APK-033","name":"APOTEKKU KUTA"},{"code":"APK-034","name":"APOTEKKU MAMBAL"},{"code":"APK-035","name":"APOTEKKU MARGA"},{"code":"APK-036","name":"APOTEKKU MENGWI"},{"code":"APK-037","name":"APOTEKKU NEGARA"},{"code":"APK-038","name":"APOTEKKU NO. 27 SENGANAN"},{"code":"APK-039","name":"APOTEKKU NO. 28 SERIRIT"},{"code":"APK-041","name":"APOTEKKU NO. 31 GATSU"},{"code":"APK-042","name":"APOTEKKU NO. 33 YEH AYA"},{"code":"APK-043","name":"APOTEKKU NO. 34 TAMAN GRIYA"},{"code":"APK-044","name":"APOTEKKU NO. 35 MONANG MANING"},{"code":"APK-045","name":"APOTEKKU NO. 36 CAHAYA MEDIKA"},{"code":"APK-046","name":"APOTEKKU NO. 37 TRENGGULI"},{"code":"APK-047","name":"APOTEKKU NO. 39 DALUNG"},{"code":"APK-048","name":"APOTEKKU NO. 41 KARANGASEM"},{"code":"APK-049","name":"APOTEKKU NO. 43 SUKAWATI"},{"code":"APK-050","name":"APOTEKKU NO. 49 MANYAR"},{"code":"APK-051","name":"APOTEKKU NO. 51 ABIAN TUBUH MATARAM"},{"code":"APK-052","name":"APOTEKKU NO. 52 AMPENAN MATARAM"},{"code":"APK-053","name":"APOTEKKU NO. 54 SINGASANA"},{"code":"APK-054","name":"APOTEKKU NO. 55 GIANYAR"},{"code":"APK-055","name":"APOTEKKU NO. 56 SURYA MEDIKA"},{"code":"APK-056","name":"APOTEKKU NO. 57 PEKUTATAN"},{"code":"APK-058","name":"APOTEKKU NO. 59 NUSA DUA"},{"code":"APK-059","name":"APOTEKKU NO. 62 PAGUTAN MATARAM"},{"code":"APK-060","name":"APOTEKKU NO. 64 NYITDAH"},{"code":"APK-061","name":"APOTEKKU NO. 65 KLUNGKUNG"},{"code":"APK-062","name":"APOTEKKU NO. 66 TUBAN"},{"code":"APK-063","name":"APOTEKKU NO. 67 DANAU BUYAN"},{"code":"APK-064","name":"APOTEKKU NO. 68 HAYAM WURUK"},{"code":"APK-065","name":"APOTEKKU NO. 70 DALUNG PERMAI"},{"code":"APK-066","name":"APOTEKKU NO. 71 SURAPATI SINGARAJA"},{"code":"APK-067","name":"APOTEKKU NO. 72 GOR DEBES"},{"code":"APK-068","name":"APOTEKKU NO. 73 PEREAN"},{"code":"APK-069","name":"APOTEKKU NO. 74 PENARUNGAN"},{"code":"APK-070","name":"APOTEKKU NO. 75 TEUKU UMAR"},{"code":"APK-085","name":"APOTEKKU NO. 76 ABIANSEMAL"},{"code":"APK-086","name":"APOTEKKU NO. 77 REMBIGA MATARAM"},{"code":"APK-087","name":"APOTEKKU NO. 78 TAMAN GRIYA 2"},{"code":"APK-092","name":"APOTEKKU NO. 80 SUKAWATI 2"},{"code":"APK-093","name":"APOTEKKU NO. 81 SELABIH"},{"code":"APK-071","name":"APOTEKKU PADU KARYA"},{"code":"APK-072","name":"APOTEKKU PULAU KAWE"},{"code":"APK-073","name":"APOTEKKU SANGGULAN"},{"code":"APK-074","name":"APOTEKKU SESETAN"},{"code":"APK-075","name":"APOTEKKU SINGARAJA"},{"code":"APK-076","name":"APOTEKKU TEUKU UMAR BARAT"},{"code":"APK-077","name":"APOTEKKU UBUD"},{"code":"APK-080","name":"PT. ABY MEDIKA SEJAHTERA"}];
+
+/* ================= KPI TEAM ================= */
+const KPIS = [
+  {id:"bsc", name:"BSC Outlet", unit:"", target:85, dir:"up", owner:"OPS", support:"QIC", color:"#BE1F2D"},
+  {id:"complaint", name:"Complaint Rate", unit:"%", target:2, dir:"down", owner:"QIC", support:"OPS", color:"#0e6b5c"},
+  {id:"service", name:"Service Standard", unit:"%", target:95, dir:"up", owner:"OPS", support:"HGPGA", color:"#2e6f9e"},
+  {id:"sku", name:"SKU Ready All Pareto", unit:"%", target:95, dir:"up", owner:"OPS", support:"QIC", color:"#dd9a2b"},
+  {id:"audit", name:"Audit Score", unit:"", target:90, dir:"up", owner:"QIC", support:"OPS", color:"#6b5b9e"}
+];
+
+/* ================= SEED DATA (hasil CEO visit) ================= */
+/* Data temuan: Kunjungan CEO + update FAST_IMPROVEMENT (13–14 Juli 2026) */
+const SEED = [{"id": "t1", "outlet": "APOTEKKU KAMASAN", "temuan": "Minta ruang penyimpanan di lantai 2 untuk arsip, belikan rak besi", "divisi": "OPS", "ca": "", "pa": "", "timeline": "2026-07-28", "pic": "Kak Rika", "vendor": "Bli Gung Kenzie", "status": "progress", "progres": "Dilakukan pengukuran oleh insan outlet untuk ukuran yang dapat disesuaikan pada lantai 2 apotek", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "status → On Progress; PIC → Kak Rika; vendor → Bli Gung Kenzie; deadline → 28 Jul 2026"}]}, {"id": "t2", "outlet": "APOTEKKU KAMASAN", "temuan": "Atur kembali sekat-sekat di laci penyimpanan atas rak putar dan antar kotak obat", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T01:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}]}, {"id": "t3", "outlet": "APOTEKKU KAMASAN", "temuan": "Audit 5R Klinik Heera dilaksanakan dengan komitmen dr. Sheira sebelumnya", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T01:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}]}, {"id": "t4", "outlet": "APOTEKKU KAMASAN", "temuan": "Kak Yudha belum terbiasa melakukan penawaran; pemberian struk belanja sering terlewat dan SSA harus dipanggil kembali untuk diberikan struk", "divisi": "HGPGA", "ca": "1. Memberikan coaching via WA langsung ke yang bersangkutan mengenai alur pelayanan sesuai SOP, mulai dari greeting, penawaran produk, hingga pemberian struk sebelum pelanggan meninggalkan kasir.\n2. Melakukan role play pelayanan via WA, dan cara penggalian keluhan pasien.\n3. Leader memberikan pendampingan (shadowing) selama proses transaksi dan memberikan feedback setelah pelayanan selesai.", "pa": "1. Membuat checklist SOP kasir yang ditempatkan di area transaksi sebagai pengingat.\n2. Leader melakukan observasi harian dan evaluasi singkat terkait konsistensi penawaran produk serta pemberian struk.\n3. Membiasakan briefing sebelum operasional dengan mengingatkan \"3 Closing Wajib\": Penawaran → Struk → Greeting Penutup.\n4. Review rekaman CCTV secara berkala untuk memastikan SOP dijalankan secara konsisten.", "timeline": "2026-07-14", "pic": "", "vendor": "", "status": "progress", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "status → On Progress; corrective & preventive action diisi; deadline → 14 Jul 2026"}]}, {"id": "t5", "outlet": "APOTEKKU SANGGULAN", "temuan": "Kamar mandi dibersihkan dengan Bli Clean", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T01:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}]}, {"id": "t6", "outlet": "APOTEKKU SANGGULAN", "temuan": "Cat tembok dan plafon serta perbaiki plafon yang dilubangi", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "Risma", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "PIC → Risma"}]}, {"id": "t7", "outlet": "APOTEKKU SANGGULAN", "temuan": "Ganti semua tempelan yang sudah tidak baik", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "Gita", "status": "progress", "progres": "Koordinasi OPS dan outlet, stiker apa saja yang harus diganti. Data dari outlet maksimal jam 11.00.", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "status → On Progress; vendor → Gita"}]}, {"id": "t8", "outlet": "APOTEKKU SANGGULAN", "temuan": "Rapikan lantai 2, belikan rak apabila diperlukan, dan buang yang sudah tidak terpakai", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T01:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}]}, {"id": "t9", "outlet": "APOTEKKU SANGGULAN", "temuan": "Posisi kartu service AC dan Calmic disesuaikan", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "Dio", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "vendor → Dio"}]}, {"id": "t10", "outlet": "APOTEKKU SANGGULAN", "temuan": "Booklet MD dijilid", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T01:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}]}, {"id": "t11", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Perubahan mindset: kebersihan tanggung jawab bersama — ketika Kak Wawan/Kayun delivery, tidak ada inisiatif melakukan kegiatan kebersihan", "divisi": "QIC", "ca": "Membuat komitmen bersama", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "progress", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "status → On Progress; corrective action: membuat komitmen"}]}, {"id": "t12", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "PIC rak belum berjalan, perlu kontrol harian dari leader/kapten shift", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T01:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}]}, {"id": "t13", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Kak Agus harus lebih sering dinas pagi untuk memudahkan koordinasi", "divisi": "HGPGA", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T01:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}]}, {"id": "t14", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Pelayanan masih belum baik: tidak ada up-selling dan cross-helping; ketika barang kosong tidak dilakukan SOP jabat SSA dan tidak diberikan struk", "divisi": "HGPGA", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T01:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}]}, {"id": "t15", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Belikan rak piring", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "Pak Kayun", "vendor": "", "status": "progress", "progres": "Besok tgl 14/7/2026 dibelikan rak piring", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim → Operational & GPP Excellence; PIC → Pak Kayun; status → On Progress"}]}, {"id": "t16", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Area samping kotor", "divisi": "QIC", "ca": "Membersihkan pipa yang kotor", "pa": "Membuat agenda untuk cek kebersihan pipa saat general cleaning", "timeline": "2026-07-13", "pic": "Pak Wawan", "vendor": "", "status": "done", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "status → Selesai (menunggu verifikasi QI & C); PIC → Pak Wawan"}]}, {"id": "t17", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Keset tidak disimpan", "divisi": "QIC", "ca": "Sudah menyimpan keset dan alat kebersihan di tempatnya", "pa": "Konsisten dalam menyimpan alat kebersihan", "timeline": "2026-07-13", "pic": "Agus Sriyana", "vendor": "", "status": "done", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "status → Selesai (menunggu verifikasi QI & C); PIC → Agus Sriyana"}]}, {"id": "t18", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Keset sudah luntur", "divisi": "QIC", "ca": "Membeli keset baru di SSC", "pa": "Rutin mengganti keset jika sudah luntur dan rusak", "timeline": "2026-07-14", "pic": "Pak Wawan", "vendor": "", "status": "progress", "progres": "Beli keset tgl 14 Juli 2026", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "status → On Progress; PIC → Pak Wawan; deadline → 14 Jul 2026"}]}, {"id": "t19", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Kursi pijat luntur", "divisi": "QIC", "ca": "", "pa": "", "timeline": "2026-07-16", "pic": "Kak Dony", "vendor": "", "status": "progress", "progres": "Sudah dilakukan FU ke pihak kursi pijat (target 15–16 Juli 2026)", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "status → On Progress; PIC → Kak Dony; deadline → 16 Jul 2026"}]}, {"id": "t20", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Debu tebal di area rak alkes", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T01:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}]}, {"id": "t21", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Lampu mau lepas dan sudah tidak terang — ganti semua lampu Kita Sidhikarya", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim → Operational & GPP Excellence"}]}, {"id": "t22", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Suhu kulkas tidak sesuai dan di dalam kulkas ada makanan", "divisi": "QIC", "ca": "Memindahkan makanan yang terdapat di kulkas dalam", "pa": "Membuat komitmen dengan tim agar tidak menyimpan makanan dan minuman di dalam kulkas yang berisi stok obat", "timeline": "2026-07-13", "pic": "Ayunia", "vendor": "", "status": "done", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "status → Selesai (menunggu verifikasi QI & C); PIC → Ayunia"}]}, {"id": "t23", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Rak gudang dalam berdebu", "divisi": "QIC", "ca": "Sudah membersihkan rak gudang", "pa": "Membuat jadwal cek kebersihan area gudang setiap hari Kamis", "timeline": "2026-07-13", "pic": "Agus dan Ayu Kartika", "vendor": "", "status": "done", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "status → Selesai (menunggu verifikasi QI & C); PIC → Agus dan Ayu Kartika"}]}, {"id": "t24", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Buatkan jalur kabel", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim → Operational & GPP Excellence"}]}, {"id": "t25", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Tembok ruang dokter perlu diperbaiki", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim → Operational & GPP Excellence"}]}, {"id": "t26", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Bersihkan dan cat tembok kamar mandi", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim → Operational & GPP Excellence"}]}, {"id": "t27", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Cat plafon ruang tunggu", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim → Operational & GPP Excellence"}]}, {"id": "t28", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Ganti stiker pijakan antrean ruang tunggu", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim → Operational & GPP Excellence"}]}, {"id": "t29", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Pastikan kotak safety box digantung", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim → Operational & GPP Excellence"}]}, {"id": "t30", "outlet": "APOTEKKU KITA SIDHIKARYA", "temuan": "Kesesuaian isi meja racik dan bawah meja racik dirapikan", "divisi": "QIC", "ca": "Segera membersihkan area meja racik", "pa": "Komitmen checklist kebersihan area peracikan setiap shift pagi", "timeline": "2026-07-13", "pic": "Kapten shift pagi", "vendor": "", "status": "done", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "status → Selesai (menunggu verifikasi QI & C); PIC → Kapten shift pagi"}]}, {"id": "t31", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Pastikan kembali PIC per bagian", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t32", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Pastikan GC, Kamis Klimis, dan joblist berjalan", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "Dikerjakan bersama QI & C (divisi: OPS, QI & C)", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim → OPS (lead), didukung QI & C"}]}, {"id": "t33", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Pelayanan dimaksimalkan kembali terkait menggali keluhan SSA", "divisi": "HGPGA", "ca": "1. Memberikan coaching via WA langsung mengenai alur pelayanan sesuai SOP, mulai dari greeting, penawaran produk, hingga pemberian struk sebelum pelanggan meninggalkan kasir.\n2. Melakukan role play pelayanan via telepon WA, belajar menggali keluhan pasien.\n3. Leader memberikan pendampingan (shadowing) selama proses transaksi dan memberikan feedback setelah pelayanan selesai.", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "progress", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "status → On Progress; corrective action diisi"}]}, {"id": "t34", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Sampah menumpuk di depan", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t35", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Sudut rel rolling door berdebu", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t36", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Tong sampah kotor", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t37", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Spanduk yang sudah habis kerja sama dilepas", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t38", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Lampu teras mau lepas", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t39", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Bekas lem pada list loket", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t40", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Ganti stiker yang sudah lepas dan ganti stiker cek kesehatan", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t41", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Notifikasi WA belum sesuai standar", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t42", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Pasang stiker sunblast di pintu", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t43", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Pasang keramik dekat pintu rolling door", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t44", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Dipastikan tidak ada tempat sampah terbuka di semua outlet", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t45", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Kebersihan di saklar lampu", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t46", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Pastikan ruang racik bersih", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t47", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Kotak-kotak spuit dipotong rapi", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t48", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Stiker di kulkas diganti", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t49", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Bunga es dibersihkan dan stok es diperiksa", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t50", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Gantungan di-full-kan", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t51", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Pengarsipan faktur belum sesuai SOP", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t52", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Pastikan tidak ada gudang/ruang praktik dokter yang berantakan dan kotor", "divisi": "QIC", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t53", "outlet": "APOTEKKU NO. 36 CAHAYA MEDIKA", "temuan": "Pangkas kembang kertas", "divisi": "OPS", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-13T01:00:00.000Z", "updated": "2026-07-13T09:00:00.000Z", "log": [{"t": "2026-07-13T01:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO"}, {"t": "2026-07-13T09:00:00.000Z", "msg": "tim penanggung jawab ditetapkan"}]}, {"id": "t54", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Dipastikan ada tangga untuk membersihkan kaca", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t55", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Koordinasi dengan warung padang untuk menjaga kebersihan wastafel", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t56", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Kebersihan per PIC di-reminding kembali dan menjaga kerapihan produk di rak kaca dalam", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t57", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Pelayanan Kak Afsyah sudah baik; dipertimbangkan pengaturan jadwal outlet ramai: shift pagi 1 orang masuk jam 7", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t58", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Bersihkan bagian belakang wastafel depan", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t59", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Bersihkan sela-sela pipa", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t60", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Ganti stiker cek kesehatan dengan yang baru", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t61", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Stiker GPP Bintang 5 dipindahkan ke depan pintu", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t62", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Standar alat kebersihan tanpa plastik", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t63", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Kaca atas gondola kotor", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t64", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Perbaiki bagian laci penyimpanan yang rusak", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t65", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Pastikan AC menyala sesuai waktunya (AC belakang menyala pagi hari)", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t66", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Produk tidak di atas pallet", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t67", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Bersihkan area samping kulkas bawah wastafel", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t68", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Bersihkan seluruh area lantai kamar mandi", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t69", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Evaluasi bersama MD: COC banyak yang kosong", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}, {"id": "t70", "outlet": "APOTEKKU NO. 54 SINGASANA", "temuan": "Kain penutup di duratrans depan diambil dan dibersihkan", "divisi": "NONE", "ca": "", "pa": "", "timeline": "", "pic": "", "vendor": "", "status": "open", "progres": "", "bukti": "", "foto": null, "created": "2026-07-14T02:00:00.000Z", "updated": "2026-07-14T02:00:00.000Z", "log": [{"t": "2026-07-14T02:00:00.000Z", "msg": "Temuan dicatat dari Kunjungan CEO 14 Juli 2026"}]}];
+
+/* ================= PENYIMPANAN AMAN ================= */
+const KEY = "tf_ose_data_v2"; // v2: update FAST_IMPROVEMENT 13-14 Juli 2026
+let storageOk = false;
+try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); storageOk = true; }catch(e){ storageOk = false; }
+let db;
+const FIREBASE_DOC_PATH = { collection:"commandCenter", doc:"sharedState" };
+const firebaseConfig = {
+  apiKey: "AIzaSyDEOQF16MaCBWt2AakKTExM298YZiFGcPo",
+  authDomain: "task-force-ose-command-center.firebaseapp.com",
+  projectId: "task-force-ose-command-center",
+  storageBucket: "task-force-ose-command-center.firebasestorage.app",
+  messagingSenderId: "380412737055",
+  appId: "1:380412737055:web:761de8e4ac6738b377c72a",
+  measurementId: "G-DGC8DFSKMC"
+};
+let firebaseApi = null;
+let firebaseSyncTimer = null;
+let firebaseToastShown = false;
+const firebaseState = { status:"idle", message:"Firebase belum diinisialisasi." };
+function createDefaultDb(){
+  return { items: JSON.parse(JSON.stringify(SEED)), meta:{visit:VISIT_LABEL} };
+}
+function cloneData(data){
+  return JSON.parse(JSON.stringify(data));
+}
+function renderStorageNote(){
+  const note = $("#storageNote");
+  if(!note) return;
+  const localMsg = storageOk
+    ? "Penyimpanan browser aktif sebagai cadangan lokal di perangkat ini."
+    : "Penyimpanan browser tidak tersedia di perangkat ini.";
+  const cloudMsg = firebaseState.status==="ready"
+    ? "Sinkronisasi cloud Firebase aktif."
+    : firebaseState.status==="error"
+      ? "Sinkronisasi cloud Firebase gagal, aplikasi tetap berjalan dengan penyimpanan lokal."
+      : firebaseState.status==="loading"
+        ? "Menghubungkan sinkronisasi Firebase..."
+        : "Sinkronisasi cloud Firebase belum aktif.";
+  note.className = "storage-note"+((!storageOk || firebaseState.status==="error")?" warn":"");
+  note.innerHTML = `💾 <b>${localMsg}</b> ${cloudMsg} ${esc(firebaseState.message)}`;
+}
+function getLocalSnapshot(){
+  if(!storageOk) return null;
+  try{
+    const raw = localStorage.getItem(KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){
+    return null;
+  }
+}
+function getSnapshotStamp(data){
+  return (data && data.meta && data.meta.lastSavedAt) ? Date.parse(data.meta.lastSavedAt) || 0 : 0;
+}
+function markDbSaved(source){
+  if(!db.meta) db.meta = {};
+  db.meta.visit = db.meta.visit || VISIT_LABEL;
+  db.meta.lastSavedAt = new Date().toISOString();
+  db.meta.lastSavedSource = source;
+}
+async function initFirebase(){
+  firebaseState.status = "loading";
+  firebaseState.message = "Menginisialisasi koneksi Firebase.";
+  renderStorageNote();
+  try{
+    const [
+      { initializeApp },
+      { getAnalytics, isSupported },
+      { getFirestore, doc, getDoc, setDoc }
+    ] = await Promise.all([
+      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js"),
+      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js")
+    ]);
+    const app = initializeApp(firebaseConfig);
+    isSupported().then(supported=>{ if(supported) getAnalytics(app); }).catch(()=>{});
+    const store = getFirestore(app);
+    firebaseApi = {
+      getDoc,
+      setDoc,
+      stateRef: doc(store, FIREBASE_DOC_PATH.collection, FIREBASE_DOC_PATH.doc)
+    };
+    firebaseState.status = "ready";
+    firebaseState.message = "Data dapat disinkronkan antar perangkat melalui Firestore.";
+  }catch(e){
+    firebaseApi = null;
+    firebaseState.status = "error";
+    firebaseState.message = "Pastikan Firestore sudah dibuat dan aturan aksesnya mengizinkan aplikasi ini.";
+    console.warn("Firebase init gagal:", e);
+  }
+  renderStorageNote();
+}
+async function load(){
+  const localData = getLocalSnapshot();
+  let cloudData = null;
+  if(firebaseApi){
+    try{
+      const snap = await firebaseApi.getDoc(firebaseApi.stateRef);
+      if(snap.exists()){
+        const payload = snap.data();
+        if(payload && payload.data) cloudData = payload.data;
+      }
+    }catch(e){
+      firebaseState.status = "error";
+      firebaseState.message = "Gagal membaca data cloud, sehingga aplikasi memakai data lokal terakhir.";
+      console.warn("Firebase load gagal:", e);
+      renderStorageNote();
+    }
+  }
+  if(localData && cloudData){
+    db = getSnapshotStamp(cloudData) > getSnapshotStamp(localData) ? cloudData : localData;
+  } else if(cloudData){
+    db = cloudData;
+  } else if(localData){
+    db = localData;
+  } else {
+    db = createDefaultDb();
+  }
+}
+function shortOutletName(name){
+  return name.replace(/^APOTEKKU\s*/,"").trim() || name;
+}
+function buildSeedUsers(){
+  const base = [
+    {id:"admin", name:"Manager Task Force", role:"admin", user:"admin", pass:"1234"},
+    {id:"ssc_ops", name:"Tim OPS — SSC", role:"ssc", divisi:"OPS", user:"ops", pass:"apotekku"},
+    {id:"ssc_qic", name:"Tim QI & C — SSC", role:"ssc", divisi:"QIC", user:"qic", pass:"apotekku"},
+    {id:"ssc_hgpga", name:"Tim HGPGA — SSC", role:"ssc", divisi:"HGPGA", user:"hgpga", pass:"apotekku"}
+  ];
+  const outletUsers = OUTLETS.map(o=>({
+    id:"o_"+o.code.toLowerCase().replace(/[^a-z0-9]/g,""),
+    name:"Outlet "+shortOutletName(o.name),
+    role:"outlet", outlet:o.name, user:o.name, pass:"apotekku"  // username = nama outlet (akun BSC)
+  }));
+  return base.concat(outletUsers);
+}
+const USERS_SEED = buildSeedUsers();
+function migrate(){
+  if(!db.meta) db.meta = {};
+  if(!db.meta.visit) db.meta.visit = VISIT_LABEL;
+  if(!db.acts) db.acts = {};
+  if(!db.audits) db.audits = [];
+  if(!db.users || !db.users.length) db.users = JSON.parse(JSON.stringify(USERS_SEED));
+  // migrasi akun lama: pin → pass, isi username, lengkapi akun outlet dari master list
+  const legacyUser = {admin:"admin", ssc_ops:"ops", ssc_qic:"qic", ssc_hgpga:"hgpga"};
+  db.users.forEach(u=>{
+    if(u.pass===undefined) u.pass = (u.pin!==undefined && u.pin!=="") ? u.pin : (u.role==="outlet" ? "apotekku" : "");
+    delete u.pin;
+    if(!u.user){
+      if(legacyUser[u.id]) u.user = legacyUser[u.id];
+      else if(u.role==="outlet" && u.outlet){
+        u.user = u.outlet; // akun BSC = nama outlet
+      } else u.user = "user"+u.id;
+    }
+  });
+  OUTLETS.forEach(o=>{
+    if(!db.users.some(u=>u.role==="outlet" && u.outlet===o.name)){
+      db.users.push({ id:"o_"+o.code.toLowerCase().replace(/[^a-z0-9]/g,""),
+        name:"Outlet "+shortOutletName(o.name), role:"outlet", outlet:o.name, user:o.code, pass:"apotekku" });
+    }
+  });
+  // skema username outlet mengikuti akun BSC (nama outlet) — remap satu kali
+  if(!db.meta) db.meta = {};
+  if(db.meta.userScheme !== "bsc-name"){
+    db.users.forEach(u=>{
+      if(u.role!=="outlet" || !u.outlet) return;
+      const m = OUTLETS.find(o=>o.name===u.outlet);
+      const isCode = m && u.user && u.user.toLowerCase().replace(/[^a-z0-9]/g,"")===m.code.toLowerCase().replace(/[^a-z0-9]/g,"");
+      if(isCode || !u.user || u.user.startsWith("user")) u.user = u.outlet;
+    });
+    db.meta.userScheme = "bsc-name";
+  }
+  // pastikan username unik
+  const seen = {};
+  db.users.forEach(u=>{ let key=u.user.toLowerCase(); while(seen[key]){ u.user=u.user+"2"; key=u.user.toLowerCase(); } seen[key]=1; });
+  if(!db.kpi) db.kpi = {targets:{}, entries:[]};
+  if(!db.kpi.targets) db.kpi.targets = {};
+  if(!db.kpi.entries) db.kpi.entries = [];
+  KPIS.forEach(k=>{ if(db.kpi.targets[k.id]===undefined) db.kpi.targets[k.id]=k.target; });
+}
+async function pushCloudSnapshot(snapshot){
+  if(!firebaseApi) return;
+  try{
+    await firebaseApi.setDoc(firebaseApi.stateRef, {
+      data: snapshot,
+      updatedAt: snapshot.meta && snapshot.meta.lastSavedAt ? snapshot.meta.lastSavedAt : new Date().toISOString()
+    });
+    if(firebaseState.status!=="ready"){
+      firebaseState.status = "ready";
+      firebaseState.message = "Sinkronisasi cloud kembali aktif.";
+      renderStorageNote();
+    }
+  }catch(e){
+    firebaseState.status = "error";
+    firebaseState.message = "Gagal mengirim perubahan ke Firestore, tetapi data lokal tetap tersimpan.";
+    renderStorageNote();
+    console.warn("Firebase save gagal:", e);
+    if(!firebaseToastShown){
+      firebaseToastShown = true;
+      toast("Sinkronisasi Firebase gagal. Data tetap aman di browser ini.");
+    }
+  }
+}
+function queueCloudSave(){
+  if(!firebaseApi) return;
+  clearTimeout(firebaseSyncTimer);
+  firebaseSyncTimer = setTimeout(()=>pushCloudSnapshot(cloneData(db)), 600);
+}
+function save(){
+  markDbSaved(firebaseApi ? "firebase+local" : "local");
+  if(storageOk){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){ toast("⚠ Gagal menyimpan — ekspor JSON untuk backup"); } }
+  queueCloudSave();
+}
+/* ================= SESI & HAK AKSES ================= */
+const SESKEY = "tf_ose_session_v1";
+let currentUser = null;
+function loadSession(){
+  if(!storageOk) return;
+  try{ const id = localStorage.getItem(SESKEY); if(id){ const u = db.users.find(x=>x.id===id); if(u) currentUser = u; } }catch(e){}
+}
+function saveSession(){ if(storageOk){ try{ currentUser?localStorage.setItem(SESKEY,currentUser.id):localStorage.removeItem(SESKEY); }catch(e){} } }
+const isAdmin = ()=>currentUser && currentUser.role==="admin";
+const isSSC = ()=>currentUser && currentUser.role==="ssc";
+const isOutlet = ()=>currentUser && currentUser.role==="outlet";
+const canVerify = ()=>isAdmin() || (isSSC() && currentUser.divisi==="QIC");
+const canDelete = ()=>isAdmin();
+const canManageData = ()=>isAdmin();
+function visibleItems(){ return isOutlet() ? db.items.filter(i=>i.outlet===currentUser.outlet) : db.items; }
+function roleLabel(u){
+  if(u.role==="admin") return "Admin";
+  if(u.role==="ssc") return "SSC · "+(u.divisi==="QIC"?"QI & C":u.divisi);
+  return "Outlet";
+}
+function scopeLabel(u){
+  if(u.role==="admin") return "Seluruh sistem + kelola akun";
+  if(u.role==="ssc") return "Seluruh sistem — "+DIVISI[u.divisi].name;
+  return u.outlet||"—";
+}
+
+/* ================= UTIL ================= */
+const $ = s=>document.querySelector(s);
+const $$ = s=>[...document.querySelectorAll(s)];
+const esc = s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+const fmtDate = d=>{ if(!d) return "—"; const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"}); };
+const fmtTs = t=>new Date(t).toLocaleString("id-ID",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+const todayStr = ()=>{ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+function isOverdue(it){ return it.timeline && it.timeline < todayStr() && it.status!=="done" && it.status!=="verified"; }
+function dueDays(it){ if(!it.timeline) return null; const ms = new Date(it.timeline+"T00:00:00") - new Date(todayStr()+"T00:00:00"); return Math.round(ms/86400000); }
+function outlets(){ return [...new Set(db.items.map(i=>i.outlet))]; }
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2600); }
+function pct(n,d){ return d? Math.round(n/d*100):0; }
+
+function stats(items){
+  const s={total:items.length,open:0,progress:0,done:0,verified:0,overdue:0,noTeam:0,noPic:0,noDeadline:0};
+  items.forEach(it=>{ s[it.status]++; if(isOverdue(it)) s.overdue++; if(it.divisi==="NONE") s.noTeam++;
+    if(!it.pic && it.status!=="verified") s.noPic++; if(!it.timeline && it.status!=="verified"&&it.status!=="done") s.noDeadline++; });
+  s.closed = s.done + s.verified;
+  s.pct = pct(s.closed, s.total);
+  return s;
+}
+function overallLevel(s){
+  if(s.overdue>0 || s.pct<40) return {emoji:"🔴", label:"Kritis", color:"#e26a56"};
+  if(s.pct<80 || s.noTeam>0) return {emoji:"🟡", label:"Perlu Perhatian", color:"#eebc57"};
+  return {emoji:"🟢", label:"Baik", color:"#5fc08b"};
+}
+
+/* ================= RENDER: DASHBOARD ================= */
+function renderDashboard(){
+  const ITEMS = visibleItems();
+  const OUTL = [...new Set(ITEMS.map(i=>i.outlet))];
+  const s = stats(ITEMS);
+  const lvl = overallLevel(s);
+  $("#overallDot").style.background = lvl.color;
+  $("#overallText").textContent = lvl.emoji+" "+lvl.label+" · "+s.pct+"% selesai";
+  $("#todayText").innerHTML = new Date().toLocaleDateString("id-ID",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+"<br>Data: "+VISIT_LABEL;
+
+  $("#heroPct").textContent = s.pct;
+  const track = $("#heroTrack"); track.innerHTML="";
+  const segs=[["c-verified",s.verified],["c-done",s.done],["c-progress",s.progress],["c-overdue",s.overdue],["c-open",Math.max(0,s.open-s.overdue)]];
+  segs.forEach(([cls,n])=>{ if(!n) return; const d=document.createElement("div"); d.className="seg "+cls; d.style.width=(n/s.total*100)+"%"; track.appendChild(d); });
+
+  const kpis=[
+    {l:"Total Temuan", v:s.total, sub:OUTL.length+" outlet", c:"var(--ink-soft)"},
+    {l:"Terverifikasi", v:s.verified, sub:"disetujui QI & C", c:"var(--teal)"},
+    {l:"Selesai", v:s.done, sub:"menunggu verifikasi", c:"var(--green)"},
+    {l:"On Progress", v:s.progress, sub:"sedang dikerjakan", c:"var(--amber)"},
+    {l:"Overdue", v:s.overdue, sub:"lewat deadline", c:"var(--red)"},
+    {l:"Tanpa Tim / PIC", v:s.noTeam+" / "+s.noPic, sub:"perlu ditetapkan", c:"var(--blue)"}
+  ];
+  $("#kpiGrid").innerHTML = kpis.map(k=>`<div class="kpi" style="--kpi-c:${k.c}"><div class="lbl">${k.l}</div><div class="val">${k.v}</div><div class="sub">${k.sub}</div></div>`).join("");
+
+  // divisi
+  $("#divisiRow").innerHTML = Object.keys(DIVISI).map(key=>{
+    const items = ITEMS.filter(i=>i.divisi===key);
+    if(!items.length && key!=="NONE") return "";
+    const ds = stats(items);
+    const warnTxt = key==="NONE" ? `<span style="color:var(--red);font-weight:600">Tetapkan lead team untuk temuan ini</span>` : `${ds.overdue} overdue · ${ds.noPic} tanpa PIC`;
+    return `<div class="divisi-card">
+      <h4><span>${esc(DIVISI[key].name)}</span><span class="n" style="color:${DIVISI[key].color}">${ds.total}</span></h4>
+      <div class="meta">${ds.closed} selesai (${ds.pct}%) · ${warnTxt}</div>
+      <div class="progress-track" style="height:9px">
+        ${ds.total?`<div class="seg c-verified" style="width:${ds.verified/ds.total*100}%"></div>
+        <div class="seg c-done" style="width:${ds.done/ds.total*100}%"></div>
+        <div class="seg c-progress" style="width:${ds.progress/ds.total*100}%"></div>`:""}
+      </div>
+    </div>`;
+  }).join("");
+
+  // outlets
+  $("#outletGrid").innerHTML = OUTL.map(o=>{
+    const items = ITEMS.filter(i=>i.outlet===o);
+    const os = stats(items);
+    const lv = overallLevel(os);
+    const strip = items.map(it=>{
+      const cls = isOverdue(it) ? "c-overdue" : STATUS[it.status].cls;
+      return `<i class="${cls}" title="${esc(it.temuan)}"></i>`;
+    }).join("");
+    return `<div class="outlet-card" data-outlet="${esc(o)}" title="Lihat temuan ${esc(o)}">
+      <h3><span>${esc(o)}</span><span class="flag">${lv.emoji}</span></h3>
+      <div class="nums">
+        <span><b>${os.total}</b>temuan</span>
+        <span><b>${os.closed}</b>selesai</span>
+        <span><b style="color:${os.overdue?'var(--red)':'inherit'}">${os.overdue}</b>overdue</span>
+        <span><b>${os.pct}%</b>progres</span>
+      </div>
+      <div class="strip">${strip}</div>
+      <div class="strip-caption">${os.noTeam? os.noTeam+" temuan belum punya tim penanggung jawab":"Semua temuan sudah punya tim"}</div>
+    </div>`;
+  }).join("");
+  $$("#outletGrid .outlet-card").forEach(c=>c.addEventListener("click",()=>{
+    switchView("temuan"); $("#fOutlet").value=c.dataset.outlet; applyFilters();
+  }));
+
+  // urgent
+  const urgent = ITEMS.filter(i=>isOverdue(i) || (dueDays(i)!==null && dueDays(i)<=3 && i.status!=="done" && i.status!=="verified"))
+    .sort((a,b)=>(a.timeline||"9999").localeCompare(b.timeline||"9999")).slice(0,10);
+  $("#urgentBody").innerHTML = urgent.length ? urgent.map(rowHtml).join("")
+    : `<tr><td colspan="6" class="empty">Tidak ada temuan mendekati atau melewati deadline. Pastikan setiap temuan memiliki timeline agar bisa dimonitor di sini.</td></tr>`;
+  $$("#urgentBody tr[data-id]").forEach(bindRow);
+}
+
+function rowHtml(it){
+  const od = isOverdue(it);
+  const dd = dueDays(it);
+  let dueCls="", dueNote="";
+  if(od){ dueCls="due-late"; dueNote=" · lewat "+Math.abs(dd)+" hari"; }
+  else if(dd!==null && dd<=3){ dueCls="due-soon"; dueNote = dd===0?" · hari ini":" · "+dd+" hari lagi"; }
+  const st = od ? `<span class="chip chip-late">🔴 Overdue</span>` : `<span class="chip ${STATUS[it.status].chip}">${STATUS[it.status].label}</span>`;
+  return `<tr data-id="${it.id}" class="${od?'overdue-row':''}">
+    <td style="white-space:nowrap">${esc(it.outlet)}</td>
+    <td class="temuan-cell">${esc(it.temuan)}</td>
+    <td><span class="chip ${DIVISI[it.divisi].chip}">${it.divisi==="NONE"?"⚠ Belum ada":esc(it.divisi==="QIC"?"QI & C":it.divisi)}</span></td>
+    <td>${it.pic?esc(it.pic):'<span class="muted">—</span>'}</td>
+    <td class="${dueCls}" style="white-space:nowrap">${fmtDate(it.timeline)}${dueNote}</td>
+    <td>${st}</td></tr>`;
+}
+function bindRow(tr){ tr.addEventListener("click",()=>openModal(tr.dataset.id)); }
+
+/* ================= RENDER: TEMUAN ================= */
+function applyFilters(){
+  const q = $("#fSearch").value.toLowerCase();
+  const fo = $("#fOutlet").value, fd = $("#fDivisi").value, fs = $("#fStatus").value, sort=$("#fSort").value;
+  let list = visibleItems().filter(it=>{
+    if(fo && it.outlet!==fo) return false;
+    if(fd && it.divisi!==fd) return false;
+    if(fs==="overdue"){ if(!isOverdue(it)) return false; }
+    else if(fs && it.status!==fs) return false;
+    if(q){ const hay=(it.temuan+" "+it.ca+" "+it.pa+" "+it.pic+" "+it.vendor+" "+it.progres+" "+it.bukti).toLowerCase(); if(!hay.includes(q)) return false; }
+    return true;
+  });
+  if(sort==="deadline") list = list.slice().sort((a,b)=>(a.timeline||"9999").localeCompare(b.timeline||"9999"));
+  else if(sort==="status"){ const ord={open:0,progress:1,done:2,verified:3}; list=list.slice().sort((a,b)=>{ const ao=isOverdue(a)?-1:ord[a.status], bo=isOverdue(b)?-1:ord[b.status]; return ao-bo; }); }
+  else if(sort==="updated") list = list.slice().sort((a,b)=>b.updated.localeCompare(a.updated));
+
+  renderTemuanTable(list);
+  $("#temuanCount").textContent = "Menampilkan "+list.length+" dari "+visibleItems().length+" temuan";
+}
+function renderTemuanTable(list){
+  $("#temuanBody").innerHTML = list.length ? list.map((it,idx)=>{
+    const od = isOverdue(it); const dd = dueDays(it);
+    let dueCls="", dueNote="";
+    if(od){ dueCls="due-late"; dueNote=" · lewat "+Math.abs(dd)+" hr"; }
+    else if(dd!==null && dd<=3 && it.status!=="done" && it.status!=="verified"){ dueCls="due-soon"; dueNote = dd===0?" · hari ini":" · "+dd+" hr lagi"; }
+    const st = od ? `<span class="chip chip-late">🔴 Overdue</span>` : `<span class="chip ${STATUS[it.status].chip}">${STATUS[it.status].label}</span>`;
+    return `<tr data-id="${it.id}" class="${od?'overdue-row':''}">
+      <td class="muted">${idx+1}</td>
+      <td style="white-space:nowrap">${esc(it.outlet)}</td>
+      <td class="temuan-cell">${esc(it.temuan)}${it.fotoTemuan?' <span title="Ada foto temuan">📷</span>':""}${it.foto?' <span title="Ada foto bukti perbaikan">🖼️</span>':""}</td>
+      <td><span class="chip ${DIVISI[it.divisi].chip}">${it.divisi==="NONE"?"⚠ Belum ada":(it.divisi==="QIC"?"QI & C":esc(it.divisi))}</span></td>
+      <td class="temuan-cell" style="max-width:250px">${it.ca?esc(it.ca):'<span class="muted">— belum diisi</span>'}</td>
+      <td>${it.pic?esc(it.pic):'<span class="muted">—</span>'}</td>
+      <td class="${dueCls}" style="white-space:nowrap">${fmtDate(it.timeline)}${dueNote}</td>
+      <td>${st}</td></tr>`;
+  }).join("") : `<tr><td colspan="8" class="empty">Tidak ada temuan yang cocok dengan filter.</td></tr>`;
+  $$("#temuanBody tr[data-id]").forEach(bindRow);
+}
+
+/* ================= RENDER: PRIORITAS ================= */
+function renderPrioritas(){
+  const cards = outlets().map(o=>{
+    const items = db.items.filter(i=>i.outlet===o);
+    const s = stats(items);
+    const crits=[];
+    if(s.overdue>0) crits.push({t:s.overdue+" temuan overdue",k:"bad"});
+    if(s.pct<50) crits.push({t:"Progres baru "+s.pct+"%",k: s.pct<25?"bad":"warn"});
+    if(s.noTeam>0) crits.push({t:s.noTeam+" temuan tanpa tim",k:"warn"});
+    if(s.noPic>0) crits.push({t:s.noPic+" temuan tanpa PIC",k:"warn"});
+    if(s.noDeadline>0) crits.push({t:s.noDeadline+" temuan tanpa deadline",k:"warn"});
+    if(!crits.length) crits.push({t:"Semua terkendali",k:"good"});
+    const score = s.overdue*3 + (100-s.pct)/10 + s.noTeam + s.noPic*0.5;
+    const zoom = s.overdue>0 || s.pct<40;
+    return {o,s,crits,score,zoom};
+  }).sort((a,b)=>b.score-a.score);
+
+  $("#cntPrio").textContent = cards.filter(c=>c.zoom).length;
+  $("#prioList").innerHTML = cards.map(c=>{
+    const cls = c.zoom?"":"warn"; const ok = c.crits[0].k==="good";
+    const lead = leadTeams(c.o);
+    return `<div class="prio-card ${ok?'ok':cls}">
+      <h3>${esc(c.o)} ${c.zoom?'<span class="zoom-flag">ZOOM REVIEW</span>':""} <span style="margin-left:auto;font-size:13px;color:var(--ink-soft);font-weight:500">${c.s.closed}/${c.s.total} selesai · ${c.s.pct}%</span></h3>
+      <div class="crit-list">${c.crits.map(cr=>`<span class="crit ${cr.k}">${esc(cr.t)}</span>`).join("")}</div>
+      <div class="prio-note"><b>Lead team dominan:</b> ${lead} · <button class="btn btn-ghost btn-sm" onclick="gotoOutlet('${esc(c.o).replace(/'/g,"\\'")}')" style="margin-left:6px">Lihat temuan →</button></div>
+      ${c.zoom?`<div class="prio-note" style="color:var(--red)">Memenuhi kriteria Zoom Review: undang seluruh insan outlet, leader outlet, area/regional terkait, dan tiga tim task force.</div>`:""}
+    </div>`;
+  }).join("");
+}
+function leadTeams(o){
+  const cnt={}; db.items.filter(i=>i.outlet===o && i.divisi!=="NONE").forEach(i=>cnt[i.divisi]=(cnt[i.divisi]||0)+1);
+  const top = Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,2).map(e=>DIVISI[e[0]].name+" ("+e[1]+")");
+  return top.length?top.join(", "):"— belum ada tim ditetapkan";
+}
+function gotoOutlet(o){ switchView("temuan"); $("#fOutlet").value=o; $("#fDivisi").value=""; $("#fStatus").value=""; applyFilters(); }
+
+/* ================= RENDER: LAPORAN CEO ================= */
+function renderReport(){
+  const s = stats(db.items); const lvl = overallLevel(s);
+  const now = new Date();
+  const teamRows = Object.keys(DIVISI).map(k=>{
+    const items=db.items.filter(i=>i.divisi===k); if(!items.length) return "";
+    const ds=stats(items);
+    return `<tr><td>${esc(DIVISI[k].name)}</td><td style="text-align:right">${ds.total}</td><td style="text-align:right">${ds.progress}</td><td style="text-align:right">${ds.closed}</td><td style="text-align:right">${ds.overdue}</td><td style="text-align:right"><b>${ds.pct}%</b></td></tr>`;
+  }).join("");
+  const outletRows = outlets().map(o=>{
+    const items=db.items.filter(i=>i.outlet===o); const os=stats(items); const lv=overallLevel(os);
+    return `<tr><td>${esc(o)}</td><td style="text-align:right">${os.total}</td><td style="text-align:right">${os.closed}</td><td style="text-align:right">${os.overdue}</td><td style="text-align:right">${os.pct}%</td><td>${lv.emoji} ${lv.label}</td></tr>`;
+  }).join("");
+  const overdue = db.items.filter(isOverdue).sort((a,b)=>a.timeline.localeCompare(b.timeline));
+  const recent = db.items.filter(i=>i.status==="done"||i.status==="verified").sort((a,b)=>b.updated.localeCompare(a.updated)).slice(0,8);
+  const noTeam = db.items.filter(i=>i.divisi==="NONE");
+
+  const RPT_LOGO = `<svg viewBox="0 0 200 104" xmlns="http://www.w3.org/2000/svg" style="width:62px;height:33px;flex-shrink:0">
+      <rect x="6" y="6" width="188" height="92" rx="46" fill="#BE1F2D" stroke="#BE1F2D" stroke-width="7"/>
+      <path d="M104,20 H142 A32,32 0 0 1 142,84 H104 Z" fill="#fff"/>
+      <rect x="46" y="26" width="18" height="52" fill="#fff"/>
+      <rect x="29" y="43" width="52" height="18" fill="#fff"/></svg>`;
+  $("#reportSheet").innerHTML = `
+    <div style="display:flex;align-items:center;gap:13px;margin-bottom:14px">
+      ${RPT_LOGO}
+      <div><div style="font-family:var(--font-display);font-weight:700;font-size:19px;letter-spacing:2px;color:var(--brand-deep)">APOTEKKU</div>
+      <div style="font-size:11.5px;color:var(--ink-faint);font-style:italic">#solusikesehatankeluarga</div></div>
+    </div>
+    <h2>Laporan Tindak Lanjut Temuan ${esc(VISIT_LABEL)}</h2>
+    <div class="rpt-sub">Task Force Operational &amp; Service Excellence · APOTEKKU<br>
+    Per ${now.toLocaleDateString("id-ID",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}, pukul ${now.toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"})} WITA</div>
+    <hr class="rpt-divider">
+
+    <h3>A. Ringkasan Eksekutif</h3>
+    <p><b>Status keseluruhan: ${lvl.emoji} ${lvl.label}.</b>
+    Dari total <b>${s.total} temuan</b> pada <b>${outlets().length} outlet</b>,
+    sebanyak <b>${s.closed} temuan (${s.pct}%)</b> telah diselesaikan
+    (${s.verified} terverifikasi QI &amp; Compliance, ${s.done} menunggu verifikasi),
+    <b>${s.progress}</b> sedang dikerjakan, dan <b>${s.open}</b> masih open.
+    ${s.overdue?`Terdapat <b style="color:var(--red)">${s.overdue} temuan melewati deadline</b> yang menjadi fokus utama.`:"Tidak ada temuan yang melewati deadline."}
+    ${noTeam.length?`Sebanyak <b>${noTeam.length} temuan belum memiliki tim penanggung jawab</b> dan perlu segera ditetapkan lead team-nya.`:""}</p>
+
+    <h3>B. KPI Operational &amp; Service Excellence</h3>
+    <div class="table-wrap" style="box-shadow:none"><table>
+      <thead><tr><th>KPI</th><th style="text-align:right">Capaian</th><th style="text-align:right">Target</th><th>Status</th><th>Penanggung Jawab</th><th>Update</th></tr></thead>
+      <tbody>${KPIS.map(k=>{
+        const last=kpiLatest(k.id); const ev=kpiEval(k.id,last?last.value:null);
+        return `<tr><td>${esc(k.name)}</td>
+          <td style="text-align:right;font-weight:600">${last?fmtVal(last.value,k.unit):"—"}</td>
+          <td style="text-align:right">${k.dir==="up"?"≥":"≤"}${fmtVal(db.kpi.targets[k.id],k.unit)}</td>
+          <td>${ev.emoji} ${ev.label}</td>
+          <td>${DIVISI[k.owner].name}</td>
+          <td>${last?fmtDate(last.date):"belum ada data"}</td></tr>`;
+      }).join("")}</tbody></table></div>
+
+    <h3>C. Pelaksanaan Audit Outlet</h3>
+    ${(()=>{
+      const last7 = auditsLastDays(7);
+      const cov = new Set(last7.map(x=>x.outlet)).size;
+      const kritisAll = db.audits.filter(x=>x.result==="kritis" && !x.capa);
+      const typeRows = AUDIT_TYPES.map(t=>{
+        const cur = auditsInPeriod(t.id);
+        const outletsCur = [...new Set(cur.map(x=>x.outlet))];
+        const b=cur.filter(x=>x.result==="baik").length, m=cur.filter(x=>x.result==="temuan").length, k=cur.filter(x=>x.result==="kritis").length;
+        const div = t.divisi==="ALL"?"Seluruh Tim":DIVISI[t.divisi].name;
+        return `<tr><td>${esc(t.name)}</td><td>${FREQ[t.freq].label}</td><td>${esc(div)}</td>
+          <td style="text-align:right;font-weight:600;${cur.length?"":"color:var(--red)"}">${cur.length}</td>
+          <td>${outletsCur.length?esc(outletsCur.join(", ")):'<span style="color:var(--red)">belum ada</span>'}</td>
+          <td style="white-space:nowrap">🟢${b} 🟡${m} 🔴${k}</td></tr>`;
+      }).join("");
+      return `<p>Cakupan 7 hari terakhir: <b>${cov} dari ${OUTLETS.length} outlet</b> tersentuh audit (${last7.length} audit).
+      ${kritisAll.length?`<span style="color:var(--red)"><b>${kritisAll.length} hasil audit kritis belum diangkat menjadi CAPA.</b></span>`:""}</p>
+      <div class="table-wrap" style="box-shadow:none"><table>
+        <thead><tr><th>Jenis Audit</th><th>Jadwal</th><th>PIC Tim</th><th style="text-align:right">Audit Periode Ini</th><th>Outlet yang Diaudit</th><th>Hasil</th></tr></thead>
+        <tbody>${typeRows}</tbody></table></div>
+      ${(()=>{
+        const perlu = db.audits.filter(x=>x.result!=="baik").sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);
+        return perlu.length?`<p style="margin-top:10px"><b>Temuan audit terbaru yang perlu tindak lanjut:</b></p>
+        <ul>${perlu.map(a=>{const t=audType(a.type);const r=AUD_RESULT[a.result];
+          return `<li>${r.emoji} <b>${esc(a.outlet)}</b> — ${esc(t.name)}, ${fmtDate(a.date)} oleh ${a.team==="QIC"?"QI & C":esc(a.team)}${a.auditor?" ("+esc(a.auditor)+")":""}: ${esc(a.note||"tanpa catatan")}${a.capa?' <span class="muted">— sudah menjadi CAPA</span>':""}</li>`;}).join("")}</ul>`:"";
+      })()}`;
+    })()}
+
+    <h3>C2. Kepatuhan Checklist Review Bersama (periode berjalan)</h3>
+    <div class="table-wrap" style="box-shadow:none"><table>
+      <thead><tr><th>Tim</th><th>Terlaksana</th><th>Belum</th></tr></thead>
+      <tbody>${["OPS","QIC","HGPGA"].map(t=>{
+        const acts=ACTIVITIES.filter(a=>a.divisi===t); if(!acts.length) return "";
+        const done=acts.filter(currentDone); const pend=acts.filter(a=>!currentDone(a));
+        return `<tr><td>${esc(DIVISI[t].name)}</td>
+          <td>${done.length?done.map(a=>esc(a.name)).join(", "):"—"} <b>(${done.length}/${acts.length})</b></td>
+          <td>${pend.length?'<span style="color:var(--red)">'+pend.map(a=>esc(a.name)).join(", ")+'</span>':"✓ Lengkap"}</td></tr>`;
+      }).join("")}</tbody></table></div>
+
+    <h3>D. Progres per Tim Task Force</h3>
+    <div class="table-wrap" style="box-shadow:none"><table>
+      <thead><tr><th>Tim</th><th style="text-align:right">Temuan</th><th style="text-align:right">On Progress</th><th style="text-align:right">Selesai</th><th style="text-align:right">Overdue</th><th style="text-align:right">Progres</th></tr></thead>
+      <tbody>${teamRows}</tbody></table></div>
+
+    <h3>E. Progres per Outlet</h3>
+    <div class="table-wrap" style="box-shadow:none"><table>
+      <thead><tr><th>Outlet</th><th style="text-align:right">Temuan</th><th style="text-align:right">Selesai</th><th style="text-align:right">Overdue</th><th style="text-align:right">Progres</th><th>Status</th></tr></thead>
+      <tbody>${outletRows}</tbody></table></div>
+
+    <h3>F. Temuan Melewati Deadline${overdue.length?` (${overdue.length})`:""}</h3>
+    ${overdue.length?`<div class="table-wrap" style="box-shadow:none"><table>
+      <thead><tr><th>Outlet</th><th>Temuan</th><th>Tim</th><th>PIC</th><th>Deadline</th></tr></thead>
+      <tbody>${overdue.map(it=>`<tr><td>${esc(it.outlet)}</td><td>${esc(it.temuan)}</td><td>${DIVISI[it.divisi].name}</td><td>${esc(it.pic)||"—"}</td><td style="color:var(--red);font-weight:600">${fmtDate(it.timeline)}</td></tr>`).join("")}</tbody></table></div>`
+      :`<p>Tidak ada temuan yang melewati deadline.</p>`}
+
+    <h3>G. Penyelesaian Terbaru</h3>
+    ${recent.length?`<ul>${recent.map(it=>`<li><b>${esc(it.outlet)}</b> — ${esc(it.temuan)} <span class="muted">(${STATUS[it.status].label}${it.bukti?", bukti: "+esc(it.bukti):""})</span></li>`).join("")}</ul>`
+      :`<p>Belum ada temuan yang diselesaikan. Update status temuan melalui tab Temuan &amp; CAPA.</p>`}
+
+    <h3>H. Kebutuhan Keputusan / Dukungan</h3>
+    <ul>
+      ${noTeam.length?`<li>Penetapan lead team untuk ${noTeam.length} temuan yang belum memiliki penanggung jawab.</li>`:""}
+      ${s.noDeadline?`<li>Penetapan timeline untuk ${s.noDeadline} temuan yang belum memiliki deadline.</li>`:""}
+      ${s.noPic?`<li>Penunjukan PIC untuk ${s.noPic} temuan.</li>`:""}
+      ${s.overdue?`<li>Eskalasi dan re-scheduling untuk ${s.overdue} temuan overdue (termasuk kebutuhan vendor/anggaran bila ada).</li>`:""}
+      ${!noTeam.length&&!s.noDeadline&&!s.noPic&&!s.overdue?"<li>Tidak ada — seluruh temuan berjalan sesuai rencana.</li>":""}
+    </ul>`;
+}
+
+/* ================= MORNING BRIEF ================= */
+function buildBrief(){
+  const s = stats(db.items); const lvl = overallLevel(s);
+  const now = new Date();
+  const L=[];
+  L.push("*OSE MORNING BRIEF — TINDAK LANJUT "+VISIT_LABEL.toUpperCase()+"*");
+  L.push("Tanggal: "+now.toLocaleDateString("id-ID",{weekday:"long",day:"numeric",month:"long",year:"numeric"}));
+  L.push("Data sampai: "+now.toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"})+" WITA");
+  L.push("");
+  L.push("*KONDISI UMUM*");
+  L.push("Status: "+lvl.emoji+" "+lvl.label);
+  L.push("Progres: "+s.closed+"/"+s.total+" temuan selesai ("+s.pct+"%)");
+  L.push("On progress: "+s.progress+" | Open: "+s.open+" | Overdue: "+s.overdue);
+  L.push("");
+  L.push("*KPI UTAMA*");
+  KPIS.forEach(k=>{
+    const last=kpiLatest(k.id); const ev=kpiEval(k.id,last?last.value:null);
+    L.push("• "+k.name+": "+(last?fmtVal(last.value,k.unit):"belum ada data")+" (target "+(k.dir==="up"?"≥":"≤")+fmtVal(db.kpi.targets[k.id],k.unit)+") "+ev.emoji);
+  });
+  L.push("");
+  L.push("*AUDIT OUTLET (periode berjalan)*");
+  AUDIT_TYPES.forEach(t=>{
+    const cur = auditsInPeriod(t.id);
+    const div = t.divisi==="ALL"?"Semua Tim":(t.divisi==="QIC"?"QI & C":t.divisi);
+    if(!cur.length){ L.push("• "+t.name+" ("+div+"): belum ada audit ❗"); return; }
+    const k = cur.filter(x=>x.result==="kritis").length, m = cur.filter(x=>x.result==="temuan").length;
+    const outletsCur = [...new Set(cur.map(x=>x.outlet))];
+    L.push("• "+t.name+" ("+div+"): "+cur.length+" audit di "+outletsCur.join(", ")+(k?" — 🔴 "+k+" kritis":(m?" — 🟡 "+m+" ada temuan":" — 🟢 semua baik")));
+  });
+  const kritisBaru = db.audits.filter(x=>x.result==="kritis" && !x.capa);
+  if(kritisBaru.length) L.push("❗ "+kritisBaru.length+" hasil audit kritis belum diangkat jadi CAPA");
+  L.push("");
+  L.push("*CHECKLIST REVIEW BERSAMA*");
+  const pendActs = ACTIVITIES.filter(a=>!currentDone(a));
+  L.push("Terlaksana: "+(ACTIVITIES.length-pendActs.length)+"/"+ACTIVITIES.length+" kegiatan periode ini");
+  if(pendActs.length) L.push("Belum: "+pendActs.map(a=>a.name+" ("+(a.divisi==="QIC"?"QI & C":a.divisi)+")").join(", "));
+  L.push("");
+  L.push("*UPDATE TIGA TIM*");
+  ["HGPGA","OPS","QIC"].forEach(k=>{
+    const ds = stats(db.items.filter(i=>i.divisi===k));
+    L.push("• "+DIVISI[k].name+": "+ds.closed+"/"+ds.total+" selesai ("+ds.pct+"%)"+(ds.overdue?", "+ds.overdue+" overdue":""));
+  });
+  const nt = db.items.filter(i=>i.divisi==="NONE").length;
+  if(nt) L.push("• ⚠ "+nt+" temuan belum punya tim penanggung jawab");
+  L.push("");
+  L.push("*OUTLET PRIORITAS*");
+  outlets().map(o=>({o,s:stats(db.items.filter(i=>i.outlet===o))}))
+    .sort((a,b)=>a.s.pct-b.s.pct).slice(0,3)
+    .forEach((c,i)=>L.push((i+1)+". "+c.o+" — "+c.s.pct+"% selesai"+(c.s.overdue?", "+c.s.overdue+" overdue":"")+(c.s.noTeam?", "+c.s.noTeam+" tanpa tim":"")));
+  L.push("");
+  const od = db.items.filter(isOverdue);
+  L.push("*FOKUS HARI INI*");
+  if(od.length){ od.slice(0,3).forEach((it,i)=>L.push((i+1)+". ["+it.outlet+"] "+it.temuan+(it.pic?" — PIC: "+it.pic:""))); }
+  else {
+    const open = db.items.filter(i=>i.status==="open").slice(0,3);
+    open.forEach((it,i)=>L.push((i+1)+". ["+it.outlet+"] "+it.temuan));
+    if(!open.length) L.push("Verifikasi temuan berstatus Selesai oleh QI & Compliance.");
+  }
+  L.push("");
+  L.push("*DUKUNGAN YANG DIBUTUHKAN*");
+  const needs=[];
+  if(nt) needs.push("Penetapan lead team utk "+nt+" temuan");
+  if(s.noPic) needs.push("Penunjukan PIC utk "+s.noPic+" temuan");
+  if(s.noDeadline) needs.push("Penetapan deadline utk "+s.noDeadline+" temuan");
+  if(!needs.length) needs.push("Tidak ada — semua berjalan sesuai rencana");
+  needs.forEach(n=>L.push("• "+n));
+  return L.join("\n");
+}
+
+/* ================= MODAL ================= */
+let editing = null; // id or null (add mode)
+let fotoData = null;        // foto bukti perbaikan
+let fotoTemuanData = null;  // foto kondisi temuan
+function compressImage(file, cb){
+  const img = new Image();
+  const rd = new FileReader();
+  rd.onload = ()=>{ img.onload = ()=>{
+      const MAX=900; let w=img.width,h=img.height;
+      if(w>MAX||h>MAX){ const r=Math.min(MAX/w,MAX/h); w=Math.round(w*r); h=Math.round(h*r); }
+      const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+      cv.getContext("2d").drawImage(img,0,0,w,h);
+      cb(cv.toDataURL("image/jpeg",.78));
+    }; img.src = rd.result; };
+  rd.readAsDataURL(file);
+}
+function openModal(id){
+  editing = id || null;
+  const it = id ? db.items.find(x=>x.id===id) : null;
+  $("#modalTitle").textContent = it ? "Detail & Update Temuan" : "Tambah Temuan Baru";
+  $("#mOutlet").value = it?it.outlet:($("#fOutlet").value||"");
+  $("#mTemuan").value = it?it.temuan:"";
+  $("#mCA").value = it?it.ca:"";
+  $("#mPA").value = it?it.pa:"";
+  $("#mDivisi").value = it?it.divisi:"NONE";
+  $("#mStatus").value = it?it.status:"open";
+  $("#mPic").value = it?it.pic:"";
+  $("#mVendor").value = it?it.vendor:"";
+  $("#mTimeline").value = it?it.timeline:"";
+  $("#mProgres").value = it?it.progres:"";
+  $("#mBukti").value = it?it.bukti:"";
+  fotoData = it?it.foto:null;
+  fotoTemuanData = it?(it.fotoTemuan||null):null;
+  $("#mFoto").value = ""; $("#mFotoTemuan").value = "";
+  const prev = $("#mFotoPrev");
+  if(fotoData){ prev.src=fotoData; prev.style.display="block"; } else { prev.style.display="none"; }
+  const prevT = $("#mFotoTemuanPrev");
+  if(fotoTemuanData){ prevT.src=fotoTemuanData; prevT.style.display="block"; } else { prevT.style.display="none"; }
+  $("#mHist").innerHTML = it ? "<b>Riwayat:</b>"+it.log.slice().reverse().map(l=>`<div>${fmtTs(l.t)} — ${esc(l.msg)}</div>`).join("") : "<b>Riwayat:</b><div>Temuan baru</div>";
+  $("#btnDelete").style.display = (it && canDelete()) ? "inline-flex" : "none";
+  // Batasan akses outlet: tidak boleh ganti outlet/tim, tidak boleh verifikasi
+  $("#mOutlet").disabled = isOutlet();
+  if(isOutlet()) $("#mOutlet").value = currentUser.outlet;
+  $("#mDivisi").disabled = isOutlet();
+  const optVerif = $("#mStatus").querySelector('option[value="verified"]');
+  optVerif.disabled = !canVerify();
+  optVerif.textContent = canVerify() ? "Terverifikasi (QI & C)" : "Terverifikasi (hanya QI & C / Admin)";
+  $("#modalBack").classList.add("open");
+  document.body.style.overflow="hidden";
+}
+function closeModal(){ $("#modalBack").classList.remove("open"); document.body.style.overflow=""; }
+
+$("#mFoto").addEventListener("change", e=>{
+  const f = e.target.files[0]; if(!f) return;
+  compressImage(f, data=>{ fotoData=data; const p=$("#mFotoPrev"); p.src=data; p.style.display="block"; });
+});
+$("#mFotoTemuan").addEventListener("change", e=>{
+  const f = e.target.files[0]; if(!f) return;
+  compressImage(f, data=>{ fotoTemuanData=data; const p=$("#mFotoTemuanPrev"); p.src=data; p.style.display="block"; });
+});
+
+$("#btnSave").addEventListener("click", ()=>{
+  const outlet = $("#mOutlet").value.trim();
+  const temuan = $("#mTemuan").value.trim();
+  if(!outlet || !temuan){ toast("⚠ Nama outlet dan temuan wajib diisi"); return; }
+  if($("#mStatus").value==="verified" && !canVerify()){ toast("⚠ Status Terverifikasi hanya oleh QI & C / Admin"); return; }
+  const now = new Date().toISOString();
+  const fixedOutlet = isOutlet()? currentUser.outlet : outlet;
+  const vals = {
+    outlet: fixedOutlet, temuan, ca:$("#mCA").value.trim(), pa:$("#mPA").value.trim(),
+    divisi:$("#mDivisi").value, status:$("#mStatus").value,
+    pic:$("#mPic").value.trim(), vendor:$("#mVendor").value.trim(),
+    timeline:$("#mTimeline").value, progres:$("#mProgres").value.trim(),
+    bukti:$("#mBukti").value.trim(), foto:fotoData, fotoTemuan:fotoTemuanData
+  };
+  if(editing){
+    const it = db.items.find(x=>x.id===editing);
+    const changes=[];
+    if(it.status!==vals.status) changes.push("status → "+STATUS[vals.status].label);
+    if(it.divisi!==vals.divisi) changes.push("tim → "+DIVISI[vals.divisi].name);
+    if(it.pic!==vals.pic && vals.pic) changes.push("PIC → "+vals.pic);
+    if(it.timeline!==vals.timeline && vals.timeline) changes.push("deadline → "+fmtDate(vals.timeline));
+    if(!changes.length) changes.push("data diperbarui");
+    Object.assign(it, vals, {updated:now});
+    it.log.push({t:now, msg:changes.join("; ")});
+    toast("✓ Temuan diperbarui");
+  } else {
+    db.items.push({ id:"t"+Date.now(), ...vals, created:now, updated:now,
+      log:[{t:now,msg:"Temuan ditambahkan manual"}] });
+    toast("✓ Temuan baru ditambahkan");
+  }
+  save(); closeModal(); renderAll();
+});
+
+$("#btnDelete").addEventListener("click", ()=>{
+  if(!editing || !canDelete()){ toast("⚠ Hanya Admin yang dapat menghapus temuan"); return; }
+  if(!confirm("Hapus temuan ini secara permanen?")) return;
+  db.items = db.items.filter(x=>x.id!==editing);
+  save(); closeModal(); renderAll(); toast("Temuan dihapus");
+});
+$("#btnCancel").addEventListener("click", closeModal);
+$("#modalClose").addEventListener("click", closeModal);
+$("#modalBack").addEventListener("click", e=>{ if(e.target===e.currentTarget) closeModal(); });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
+$("#btnAdd").addEventListener("click", ()=>openModal(null));
+
+/* ================= DATA: EXPORT / IMPORT / CSV / RESET ================= */
+function download(name, content, type){
+  const blob = new Blob([content], {type});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 300);
+}
+$("#btnExportJson").addEventListener("click", ()=>{
+  download("task-force-ose-"+todayStr()+".json", JSON.stringify(db,null,2), "application/json");
+  toast("✓ JSON diunduh");
+});
+$("#importFile").addEventListener("change", e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = ()=>{
+    try{
+      const parsed = JSON.parse(rd.result);
+      if(!parsed.items || !Array.isArray(parsed.items)) throw 0;
+      db = parsed; migrate(); save(); renderAll(); toast("✓ Data berhasil diimpor ("+db.items.length+" temuan)");
+    }catch(err){ toast("⚠ File tidak valid — gunakan file hasil ekspor sistem ini"); }
+    e.target.value="";
+  };
+  rd.readAsText(f);
+});
+$("#btnExportCsv").addEventListener("click", ()=>{
+  const head = ["No","Nama Outlet","Temuan","Corrective Action","Preventive Action","Timeline","Tim","PIC","PIC Vendor","Status","Progres","Bukti Perbaikan","Update Terakhir"];
+  const q = v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  const lines = [head.map(q).join(";")];
+  db.items.forEach((it,i)=>{
+    lines.push([i+1,it.outlet,it.temuan,it.ca,it.pa,it.timeline,DIVISI[it.divisi].name,it.pic,it.vendor,
+      (isOverdue(it)?"OVERDUE — ":"")+STATUS[it.status].label,it.progres,it.bukti,fmtTs(it.updated)].map(q).join(";"));
+  });
+  // sheet kedua di bawah: log audit
+  if(db.audits.length){
+    lines.push(""); lines.push(["LOG AUDIT OUTLET"].map(q).join(";"));
+    lines.push(["Tanggal","Jenis Audit","Outlet","Tim Pelaksana","Auditor","Skor","Hasil","Temuan/Catatan","Tindak Lanjut","Jadi CAPA"].map(q).join(";"));
+    db.audits.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(a=>{
+      const t=audType(a.type);
+      lines.push([a.date, t?t.name:a.type, a.outlet, DIVISI[a.team]?DIVISI[a.team].name:a.team, a.auditor||"", a.score??"", AUD_RESULT[a.result].label, a.note||"", a.followup||"", a.capa?"Ya":"Tidak"].map(q).join(";"));
+    });
+  }
+  download("task-force-ose-"+todayStr()+".csv", "\uFEFF"+lines.join("\r\n"), "text/csv;charset=utf-8");
+  toast("✓ CSV diunduh — buka dengan Excel");
+});
+$("#btnReset").addEventListener("click", ()=>{
+  if(!confirm("Reset semua data (temuan, review rutin, dan KPI) ke kondisi awal? Seluruh update akan hilang.")) return;
+  db = { items: JSON.parse(JSON.stringify(SEED)), meta:{visit:VISIT_LABEL} };
+  migrate();
+  save(); renderAll(); toast("Data dikembalikan ke kondisi awal");
+});
+
+/* ================= BRIEF BUTTONS ================= */
+$("#btnBrief").addEventListener("click", ()=>{
+  $("#briefText").textContent = buildBrief();
+  $("#briefBox").style.display="block";
+  $("#btnCopyBrief").style.display="inline-flex";
+  if($("#briefBox").scrollIntoView) $("#briefBox").scrollIntoView({behavior:"smooth"});
+});
+$("#btnCopyBrief").addEventListener("click", async ()=>{
+  const txt = $("#briefText").textContent;
+  try{ await navigator.clipboard.writeText(txt); toast("✓ Morning Brief disalin — siap dikirim ke WhatsApp"); }
+  catch(e){
+    const ta=document.createElement("textarea"); ta.value=txt; document.body.appendChild(ta);
+    ta.select(); document.execCommand("copy"); ta.remove();
+    toast("✓ Morning Brief disalin");
+  }
+});
+
+/* ================= REVIEW RUTIN: PERIODE ================= */
+function isoWeek(d){
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
+  return {y:date.getUTCFullYear(), w:Math.ceil(((date - yearStart)/86400000 + 1)/7)};
+}
+function periodKey(freq, d){
+  if(freq==="harian") return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  if(freq==="mingguan"){ const {y,w}=isoWeek(d); return y+"-W"+String(w).padStart(2,"0"); }
+  if(freq==="2mingguan"){ const {y,w}=isoWeek(d); return y+"-B"+String(Math.ceil(w/2)).padStart(2,"0"); }
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+}
+function periodShort(freq, d){
+  if(freq==="harian") return d.toLocaleDateString("id-ID",{day:"numeric",month:"numeric"});
+  if(freq==="mingguan"){ const {w}=isoWeek(d); return "W"+w; }
+  if(freq==="2mingguan"){ const {w}=isoWeek(d); return "B"+Math.ceil(w/2); }
+  return d.toLocaleDateString("id-ID",{month:"short"});
+}
+function periodLong(freq, d){
+  if(freq==="harian") return d.toLocaleDateString("id-ID",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  if(freq==="mingguan"){ const {y,w}=isoWeek(d); return "Minggu ke-"+w+" "+y; }
+  if(freq==="2mingguan"){ const {y,w}=isoWeek(d); return "Periode 2-mingguan B"+Math.ceil(w/2)+" "+y; }
+  return d.toLocaleDateString("id-ID",{month:"long",year:"numeric"});
+}
+function shiftDate(freq, d, n){
+  const nd = new Date(d);
+  if(freq==="harian") nd.setDate(nd.getDate()+n);
+  else if(freq==="mingguan") nd.setDate(nd.getDate()+7*n);
+  else if(freq==="2mingguan") nd.setDate(nd.getDate()+14*n);
+  else nd.setMonth(nd.getMonth()+n);
+  return nd;
+}
+function actRec(actId, pk){ return db.acts[actId+"|"+pk] || null; }
+function currentDone(a){ const r=actRec(a.id, periodKey(a.freq, new Date())); return !!(r && r.done); }
+
+/* ================= AUDIT OUTLET ================= */
+function audType(id){ return AUDIT_TYPES.find(t=>t.id===id); }
+function auditsInPeriod(typeId, ref){
+  const t = audType(typeId); const pk = periodKey(t.freq, ref||new Date());
+  return db.audits.filter(x=>x.type===typeId && periodKey(t.freq, new Date(x.date+"T00:00:00"))===pk);
+}
+function auditsLastDays(n){
+  const cut = new Date(); cut.setDate(cut.getDate()-(n-1));
+  const cs = periodKey("harian", cut);
+  return db.audits.filter(x=>x.date>=cs);
+}
+function pendingCount(){
+  return ACTIVITIES.filter(a=>!currentDone(a)).length
+       + AUDIT_TYPES.filter(t=>auditsInPeriod(t.id).length===0).length;
+}
+
+let audEditing = null;
+function openAudModal(k){
+  audEditing = k || null;
+  const a = k ? db.audits.find(x=>x.k===k) : null;
+  $("#audModalTitle").textContent = a ? "Detail Audit" : "Catat Audit Outlet";
+  $("#auType").innerHTML = AUDIT_TYPES.map(t=>`<option value="${t.id}">${esc(t.name)} (${FREQ[t.freq].label})</option>`).join("");
+  $("#auType").value = a ? a.type : ( $("#fAudType").value || "cctv" );
+  $("#auDate").value = a ? a.date : todayStr();
+  $("#auOutlet").value = a ? a.outlet : "";
+  $("#auTeam").value = a ? a.team : defaultTeam($("#auType").value);
+  $("#auAuditor").value = a ? (a.auditor||"") : "";
+  $("#auScore").value = a && a.score!==null && a.score!==undefined && a.score!=="" ? a.score : "";
+  $("#auResult").value = a ? a.result : "baik";
+  $("#auNote").value = a ? (a.note||"") : "";
+  $("#auFollow").value = a ? (a.followup||"") : "";
+  $("#auDelete").style.display = a ? "inline-flex" : "none";
+  $("#audModalBack").classList.add("open");
+}
+function defaultTeam(typeId){ const t=audType(typeId); return t && t.divisi!=="ALL" ? t.divisi : "QIC"; }
+function closeAudModal(){ $("#audModalBack").classList.remove("open"); audEditing=null; }
+$("#auType").addEventListener("input", ()=>{ if(!audEditing) $("#auTeam").value = defaultTeam($("#auType").value); });
+$("#btnAuditAdd").addEventListener("click", ()=>openAudModal(null));
+$("#auSave").addEventListener("click", ()=>{
+  const outlet = $("#auOutlet").value.trim();
+  if(!outlet){ toast("⚠ Outlet wajib diisi"); return; }
+  if(!$("#auDate").value){ toast("⚠ Tanggal wajib diisi"); return; }
+  const vals = { type:$("#auType").value, date:$("#auDate").value, outlet,
+    team:$("#auTeam").value, auditor:$("#auAuditor").value.trim(),
+    score:$("#auScore").value===""?null:Number($("#auScore").value),
+    result:$("#auResult").value, note:$("#auNote").value.trim(), followup:$("#auFollow").value.trim() };
+  if(audEditing){
+    const a = db.audits.find(x=>x.k===audEditing);
+    Object.assign(a, vals, {t:new Date().toISOString()});
+    toast("✓ Audit diperbarui");
+  } else {
+    db.audits.push({k:"a"+Date.now(), ...vals, capa:false, t:new Date().toISOString()});
+    toast("✓ Audit tercatat");
+  }
+  save(); closeAudModal(); renderAktivitas(); renderReport();
+});
+$("#auDelete").addEventListener("click", ()=>{
+  if(!audEditing || !confirm("Hapus catatan audit ini?")) return;
+  db.audits = db.audits.filter(x=>x.k!==audEditing);
+  save(); closeAudModal(); renderAktivitas(); renderReport(); toast("Catatan audit dihapus");
+});
+$("#auCancel").addEventListener("click", closeAudModal);
+$("#audModalClose").addEventListener("click", closeAudModal);
+$("#audModalBack").addEventListener("click", e=>{ if(e.target===e.currentTarget) closeAudModal(); });
+
+function auditToCapa(k){
+  const a = db.audits.find(x=>x.k===k); if(!a) return;
+  if(!confirm("Jadikan hasil audit ini sebagai temuan CAPA di tab Temuan & CAPA?")) return;
+  const now = new Date().toISOString();
+  const t = audType(a.type);
+  db.items.push({ id:"t"+Date.now(), outlet:a.outlet,
+    temuan:"["+t.name+"] "+(a.note||"Temuan hasil audit"),
+    ca:"", pa:a.followup||"", timeline:"", divisi:a.team, pic:a.auditor||"", vendor:"",
+    status:"open", progres:"", bukti:"", foto:null, created:now, updated:now,
+    log:[{t:now, msg:"Dibuat dari "+t.name+" "+a.outlet+" tanggal "+fmtDate(a.date)}] });
+  a.capa = true;
+  save(); renderAll(); toast("✓ Temuan CAPA dibuat — lihat di tab Temuan & CAPA");
+}
+
+/* ================= REVIEW RUTIN: RENDER ================= */
+let actEditing = null; // {actId, pk}
+function renderAktivitas(){
+  const now = new Date();
+  // ---- ringkasan ----
+  const audToday = db.audits.filter(x=>x.date===todayStr());
+  const last7 = auditsLastDays(7);
+  const cov = new Set(last7.map(x=>x.outlet)).size;
+  const kritis7 = last7.filter(x=>x.result==="kritis").length;
+  const chkDone = ACTIVITIES.filter(currentDone).length;
+  $("#actSummary").innerHTML = `
+    <div class="act-sum-card"><h4>Audit Hari Ini</h4><div class="big" style="color:${audToday.length?'var(--teal)':'var(--red)'}">${audToday.length}</div><div class="sub">${new Set(audToday.map(x=>x.outlet)).size} outlet diaudit</div></div>
+    <div class="act-sum-card"><h4>Cakupan Outlet 7 Hari</h4><div class="big" style="color:var(--blue)">${cov}/${OUTLETS.length}</div><div class="sub">outlet tersentuh audit</div></div>
+    <div class="act-sum-card"><h4>Hasil Kritis 7 Hari</h4><div class="big" style="color:${kritis7?'var(--red)':'var(--green)'}">${kritis7}</div><div class="sub">audit berhasil kritis</div></div>
+    <div class="act-sum-card"><h4>Checklist Periode Ini</h4><div class="big" style="color:${chkDone===ACTIVITIES.length?'var(--green)':'var(--amber)'}">${chkDone}/${ACTIVITIES.length}</div><div class="sub">review bersama terlaksana</div></div>`;
+
+  $("#cntAct").textContent = pendingCount();
+
+  // ---- chips status per jenis audit (periode berjalan) ----
+  $("#auditTypeChips").innerHTML = AUDIT_TYPES.map(t=>{
+    const n = auditsInPeriod(t.id).length;
+    const div = t.divisi==="ALL"?"Seluruh Tim":(t.divisi==="QIC"?"QI & C":t.divisi);
+    return `<span class="crit ${n?'good':'bad'}" title="PIC: ${esc(div)} · ${FREQ[t.freq].label}">${n?"✓":"•"} ${esc(t.name)} (${FREQ[t.freq].label}, ${esc(div)}): ${n} audit periode ini</span>`;
+  }).join("");
+
+  // ---- tabel audit ----
+  const ft=$("#fAudType").value, fm=$("#fAudTeam").value, fr=$("#fAudResult").value, q=$("#fAudSearch").value.toLowerCase();
+  const list = db.audits.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.t.localeCompare(a.t)).filter(a=>{
+    if(ft && a.type!==ft) return false;
+    if(fm && a.team!==fm) return false;
+    if(fr && a.result!==fr) return false;
+    if(q && !(a.outlet+" "+(a.auditor||"")+" "+(a.note||"")).toLowerCase().includes(q)) return false;
+    return true;
+  });
+  $("#auditBody").innerHTML = list.length ? list.map(a=>{
+    const t = audType(a.type); const r = AUD_RESULT[a.result]||AUD_RESULT.baik;
+    return `<tr data-k="${a.k}">
+      <td style="white-space:nowrap">${fmtDate(a.date)}</td>
+      <td style="white-space:nowrap">${esc(t?t.name:a.type)}</td>
+      <td>${esc(a.outlet)}</td>
+      <td><span class="chip ${DIVISI[a.team]?DIVISI[a.team].chip:'chip-none'}">${a.team==="QIC"?"QI & C":esc(a.team)}</span></td>
+      <td>${a.auditor?esc(a.auditor):'<span class="muted">—</span>'}</td>
+      <td style="text-align:right;font-weight:600">${a.score!==null&&a.score!==undefined?fmtVal(a.score,""):'<span class="muted">—</span>'}</td>
+      <td><span class="chip ${r.chip}">${r.emoji} ${r.label}</span></td>
+      <td class="temuan-cell" style="max-width:280px">${a.note?esc(a.note):'<span class="muted">—</span>'}</td>
+      <td style="white-space:nowrap">${a.result!=="baik" ? (a.capa?'<span class="chip chip-verified">✓ CAPA</span>':`<button class="btn btn-ghost btn-sm to-capa" data-k="${a.k}" title="Jadikan temuan CAPA">→ CAPA</button>`) : ""}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="9" class="empty">Belum ada audit yang cocok. Klik <b>＋ Catat Audit</b> untuk mencatat audit outlet pertama.</td></tr>`;
+  $("#auditCount").textContent = "Menampilkan "+list.length+" dari "+db.audits.length+" catatan audit";
+  $$("#auditBody tr[data-k]").forEach(tr=>tr.addEventListener("click", e=>{
+    if(e.target.closest(".to-capa")) return;
+    openAudModal(tr.dataset.k);
+  }));
+  $$("#auditBody .to-capa").forEach(b=>b.addEventListener("click", e=>{ e.stopPropagation(); auditToCapa(b.dataset.k); }));
+
+  // ---- checklist strips ----
+  const fd = $("#fActDivisi").value;
+  $("#actGroups").innerHTML = Object.keys(FREQ).map(freq=>{
+    const acts = ACTIVITIES.filter(a=>a.freq===freq && (!fd || a.divisi===fd));
+    if(!acts.length) return "";
+    return `<div class="act-group">
+      <div class="section-title">${FREQ[freq].label}</div>
+      ${acts.map(a=>{
+        const cells = [];
+        const n = FREQ[freq].cells;
+        for(let i=n-1;i>=0;i--){
+          const d = shiftDate(freq, now, -i);
+          const pk = periodKey(freq, d);
+          const rec = actRec(a.id, pk);
+          const isCur = i===0;
+          let cls="pcell", icon="";
+          if(rec && rec.done){ cls+=" done"; icon="✓"; }
+          else if(!isCur){ cls+=" missed"; icon="✕"; }
+          if(isCur) cls+=" current";
+          const tip = periodLong(freq,d)+(rec&&rec.done?" — terlaksana"+(rec.pic?" oleh "+rec.pic:""):(isCur?" — periode berjalan":" — terlewat"));
+          cells.push(`<button class="${cls}" data-act="${a.id}" data-pk="${pk}" data-lbl="${esc(a.name)} · ${esc(periodLong(freq,d))}" title="${esc(tip)}">${icon}<span class="plbl">${periodShort(freq,d)}</span></button>`);
+        }
+        const cur = currentDone(a);
+        return `<div class="act-row">
+          <div class="act-info"><h4>${esc(a.name)}</h4>
+            <div class="chips"><span class="chip ${DIVISI[a.divisi].chip}">${esc(a.divisi==="QIC"?"QI & C":(a.divisi==="ALL"?"Seluruh Tim":a.divisi))}</span>
+            <span class="chip chip-freq">${FREQ[freq].label}</span>
+            <span class="chip ${cur?'chip-done':'chip-open'}">${cur?"✓ Periode ini terlaksana":"Belum periode ini"}</span></div>
+          </div>
+          <div class="act-strip-wrap"><div class="act-strip">${cells.join("")}</div></div>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }).join("");
+
+  $$("#actGroups .pcell").forEach(b=>b.addEventListener("click", ()=>{
+    actEditing = {actId:b.dataset.act, pk:b.dataset.pk};
+    const rec = actRec(actEditing.actId, actEditing.pk);
+    $("#actModalTitle").textContent = b.dataset.lbl;
+    $("#amStatus").value = "done";
+    $("#amPic").value = rec ? (rec.pic||"") : "";
+    $("#amNote").value = rec ? (rec.note||"") : "";
+    $("#actModalBack").classList.add("open");
+  }));
+}
+function closeActModal(){ $("#actModalBack").classList.remove("open"); actEditing=null; }
+$("#amSave").addEventListener("click", ()=>{
+  if(!actEditing) return;
+  const key = actEditing.actId+"|"+actEditing.pk;
+  if($("#amStatus").value==="undone"){ delete db.acts[key]; toast("Tanda pelaksanaan dibatalkan"); }
+  else { db.acts[key] = {done:true, pic:$("#amPic").value.trim(), note:$("#amNote").value.trim(), t:new Date().toISOString()}; toast("✓ Pelaksanaan tercatat"); }
+  save(); closeActModal(); renderAktivitas(); renderReport();
+});
+$("#amCancel").addEventListener("click", closeActModal);
+$("#actModalClose").addEventListener("click", closeActModal);
+$("#actModalBack").addEventListener("click", e=>{ if(e.target===e.currentTarget) closeActModal(); });
+$("#fActDivisi").addEventListener("input", renderAktivitas);
+["fAudType","fAudTeam","fAudResult","fAudSearch"].forEach(id=>$("#"+id).addEventListener("input", renderAktivitas));
+
+/* ================= KPI: HELPERS ================= */
+function kpiDef(id){ return KPIS.find(k=>k.id===id); }
+function kpiEntries(id){ return db.kpi.entries.filter(e=>e.id===id).slice().sort((a,b)=>a.date.localeCompare(b.date)); }
+function kpiLatest(id){ const e=kpiEntries(id); return e.length?e[e.length-1]:null; }
+function kpiEval(id, value){
+  const t = db.kpi.targets[id]; const k = kpiDef(id);
+  if(value===null||value===undefined) return {emoji:"⚪", label:"Belum ada data", chip:"chip-none", ok:null};
+  const v = Number(value);
+  if(k.dir==="up"){
+    if(v>=t) return {emoji:"🟢", label:"Tercapai", chip:"chip-done", ok:true};
+    if(v>=t*0.94) return {emoji:"🟡", label:"Mendekati", chip:"chip-progress", ok:false};
+    return {emoji:"🔴", label:"Di bawah target", chip:"chip-late", ok:false};
+  } else {
+    if(v<=t) return {emoji:"🟢", label:"Tercapai", chip:"chip-done", ok:true};
+    if(v<=t*1.15) return {emoji:"🟡", label:"Mendekati", chip:"chip-progress", ok:false};
+    return {emoji:"🔴", label:"Melebihi batas", chip:"chip-late", ok:false};
+  }
+}
+function fmtVal(v,unit){ const n=Number(v); return (Number.isInteger(n)?n:n.toFixed(2).replace(/\.?0+$/,""))+(unit||""); }
+function sparkline(id, color){
+  const es = kpiEntries(id).slice(-12);
+  if(es.length<2) return `<svg viewBox="0 0 100 40" preserveAspectRatio="none"><line x1="0" y1="20" x2="100" y2="20" stroke="#dde6e4" stroke-width="1" stroke-dasharray="3 3"/></svg>`;
+  const vals = es.map(e=>Number(e.value));
+  const t = Number(db.kpi.targets[id]);
+  const all = vals.concat([t]);
+  const min = Math.min(...all), max = Math.max(...all);
+  const pad = (max-min)||1;
+  const y = v=>36 - ((v-min)/pad)*32;
+  const x = i=>2 + i*(96/(vals.length-1));
+  const pts = vals.map((v,i)=>x(i)+","+y(v).toFixed(1)).join(" ");
+  return `<svg viewBox="0 0 100 40" preserveAspectRatio="none">
+    <line x1="0" y1="${y(t).toFixed(1)}" x2="100" y2="${y(t).toFixed(1)}" stroke="#8298a1" stroke-width="1" stroke-dasharray="3 3"/>
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${x(vals.length-1)}" cy="${y(vals[vals.length-1]).toFixed(1)}" r="2.6" fill="${color}"/>
+  </svg>`;
+}
+
+/* ================= KPI: RENDER ================= */
+function renderKpi(){
+  let redCount = 0;
+  $("#kpiMonGrid").innerHTML = KPIS.map(k=>{
+    const last = kpiLatest(k.id);
+    const ev = kpiEval(k.id, last?last.value:null);
+    if(ev.ok===false && ev.emoji==="🔴") redCount++;
+    const es = kpiEntries(k.id);
+    let delta = "";
+    if(es.length>=2){
+      const d = Number(es[es.length-1].value)-Number(es[es.length-2].value);
+      const good = k.dir==="up" ? d>=0 : d<=0;
+      delta = `<span class="delta" style="color:${good?'var(--green)':'var(--red)'}">${d>0?"▲":(d<0?"▼":"•")} ${fmtVal(Math.abs(d),k.unit)}</span>`;
+    }
+    return `<div class="kpi-mon" style="--kc:${k.color}">
+      <h4><span>${esc(k.name)}</span><span class="chip ${ev.chip}">${ev.emoji} ${ev.label}</span></h4>
+      <div class="val-row"><span class="val" style="color:${k.color}">${last?fmtVal(last.value,k.unit):"—"}</span>${delta}</div>
+      <div class="target-row">Target ${k.dir==="up"?"≥":"≤"}
+        <input type="number" step="0.01" value="${db.kpi.targets[k.id]}" data-kpi="${k.id}" class="tgt-input" aria-label="Target ${esc(k.name)}">${k.unit}
+        · PJ: ${k.owner==="QIC"?"QI & C":k.owner}</div>
+      ${sparkline(k.id, k.color)}
+      <div class="last-date">${last?"Update terakhir: "+fmtDate(last.date)+(last.note?" · "+esc(last.note):""):"Belum ada input — klik ＋ Input Nilai KPI"}</div>
+    </div>`;
+  }).join("");
+  $("#cntKpi").textContent = redCount;
+  $$(".tgt-input").forEach(inp=>inp.addEventListener("change", ()=>{
+    const v = Number(inp.value);
+    if(isNaN(v)){ toast("⚠ Target harus angka"); return; }
+    db.kpi.targets[inp.dataset.kpi]=v; save(); renderKpi(); renderReport(); toast("✓ Target diperbarui");
+  }));
+
+  // riwayat
+  const f = $("#fKpiHist").value;
+  const hist = db.kpi.entries.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.t.localeCompare(a.t)).filter(e=>!f||e.id===f);
+  $("#kpiHistBody").innerHTML = hist.length ? hist.map(e=>{
+    const k = kpiDef(e.id); const ev = kpiEval(e.id, e.value);
+    return `<tr style="cursor:default">
+      <td style="white-space:nowrap">${fmtDate(e.date)}</td><td>${esc(k.name)}</td>
+      <td style="text-align:right;font-weight:600">${fmtVal(e.value,k.unit)}</td>
+      <td style="text-align:right">${k.dir==="up"?"≥":"≤"}${fmtVal(db.kpi.targets[e.id],k.unit)}</td>
+      <td><span class="chip ${ev.chip}">${ev.emoji} ${ev.label}</span></td>
+      <td>${e.note?esc(e.note):'<span class="muted">—</span>'}</td>
+      <td><button class="del-entry" data-k="${e.k}" title="Hapus entri">🗑</button></td></tr>`;
+  }).join("") : `<tr><td colspan="7" class="empty">Belum ada riwayat. Masukkan nilai KPI melalui tombol di atas.</td></tr>`;
+  $$("#kpiHistBody .del-entry").forEach(b=>b.addEventListener("click", ()=>{
+    if(!confirm("Hapus entri KPI ini?")) return;
+    db.kpi.entries = db.kpi.entries.filter(e=>e.k!==b.dataset.k);
+    save(); renderKpi(); renderReport(); toast("Entri dihapus");
+  }));
+}
+function closeKpiModal(){ $("#kpiModalBack").classList.remove("open"); }
+$("#btnKpiAdd").addEventListener("click", ()=>{
+  $("#kmId").innerHTML = KPIS.map(k=>`<option value="${k.id}">${esc(k.name)}</option>`).join("");
+  $("#kmDate").value = todayStr(); $("#kmVal").value=""; $("#kmNote").value="";
+  $("#kpiModalBack").classList.add("open");
+});
+$("#kmSave").addEventListener("click", ()=>{
+  const val = $("#kmVal").value;
+  if(val===""||isNaN(Number(val))){ toast("⚠ Nilai KPI wajib diisi angka"); return; }
+  if(!$("#kmDate").value){ toast("⚠ Tanggal wajib diisi"); return; }
+  db.kpi.entries.push({k:"k"+Date.now(), id:$("#kmId").value, date:$("#kmDate").value, value:Number(val), note:$("#kmNote").value.trim(), t:new Date().toISOString()});
+  save(); closeKpiModal(); renderKpi(); renderReport(); toast("✓ Nilai KPI tersimpan");
+});
+$("#kmCancel").addEventListener("click", closeKpiModal);
+$("#kpiModalClose").addEventListener("click", closeKpiModal);
+$("#kpiModalBack").addEventListener("click", e=>{ if(e.target===e.currentTarget) closeKpiModal(); });
+$("#fKpiHist").addEventListener("input", renderKpi);
+
+/* ================= LOGIN & KELOLA AKUN ================= */
+function showLogin(){
+  $("#loginUser").value=""; $("#loginPin").value=""; $("#loginErr").textContent="";
+  $("#loginBack").classList.add("open");
+  setTimeout(()=>$("#loginUser").focus(), 50);
+}
+function doLogin(){
+  const uname = $("#loginUser").value.trim().toLowerCase();
+  if(!uname){ $("#loginErr").textContent="Masukkan username"; return; }
+  const u = db.users.find(x=>(x.user||"").toLowerCase()===uname);
+  if(!u){ $("#loginErr").textContent="Username tidak ditemukan"; return; }
+  if((u.pass||"") !== $("#loginPin").value){ $("#loginErr").textContent="Password salah"; return; }
+  currentUser = u; saveSession();
+  $("#loginBack").classList.remove("open");
+  applyAccess(); renderAll(); switchView(firstView());
+  toast("Selamat bekerja, "+u.name+" 👋");
+}
+$("#btnLogin").addEventListener("click", doLogin);
+$("#loginPin").addEventListener("keydown", e=>{ if(e.key==="Enter") doLogin(); });
+$("#loginUser").addEventListener("keydown", e=>{ if(e.key==="Enter") $("#loginPin").focus(); });
+$("#btnLogout").addEventListener("click", ()=>{
+  currentUser=null; saveSession(); applyAccess(); showLogin();
+});
+function firstView(){ return "dashboard"; }
+const OUTLET_HIDDEN_TABS = ["prioritas","review","kpi","laporan","data"];
+function applyAccess(){
+  const logged = !!currentUser;
+  $("#userChip").style.display = logged? "flex":"none";
+  if(logged){ $("#userName").textContent=currentUser.name; $("#userRole").textContent=roleLabel(currentUser); }
+  // tab visibility
+  $$(".tab-btn").forEach(b=>{
+    const v = b.dataset.view;
+    b.style.display = (logged && isOutlet() && OUTLET_HIDDEN_TABS.includes(v)) ? "none" : "";
+  });
+  // filter outlet terkunci utk akun outlet
+  const fo = $("#fOutlet");
+  fo.disabled = isOutlet();
+  if(isOutlet()){ fo.value = currentUser.outlet; }
+  // tombol data khusus admin
+  ["btnReset"].forEach(id=>$("#"+id).style.display = canManageData()? "":"none");
+  const impBtn = $("#importFile").previousElementSibling; // tombol pilih file
+  impBtn.style.display = canManageData()? "":"none";
+  $("#accountSection").style.display = isAdmin()? "":"none";
+  if(isAdmin()) renderUsers();
+}
+/* ---- kelola akun (admin) ---- */
+let userEditing = null;
+function renderUsers(){
+  const q = ($("#fUserSearch").value||"").toLowerCase();
+  const list = db.users.filter(u=>!q || (u.user+" "+u.name+" "+(u.outlet||"")+" "+(u.divisi||"")).toLowerCase().includes(q));
+  $("#userBody").innerHTML = list.map(u=>`<tr data-uid="${u.id}">
+    <td style="font-weight:700;white-space:nowrap">${esc(u.user||"—")}</td>
+    <td>${esc(u.name)}</td>
+    <td><span class="chip ${u.role==="admin"?"chip-late":(u.role==="ssc"?"chip-ops":"chip-freq")}">${roleLabel(u)}</span></td>
+    <td class="acct-scope">${esc(scopeLabel(u))}</td>
+    <td>${u.pass==="apotekku"?'<span class="muted">default</span>':(u.pass?"••••":'<span class="muted">kosong</span>')}</td>
+    <td><button class="btn btn-ghost btn-sm">Edit</button></td></tr>`).join("");
+  $("#userCount").textContent = "Menampilkan "+list.length+" dari "+db.users.length+" akun";
+  $$("#userBody tr").forEach(tr=>tr.addEventListener("click", ()=>openUserModal(tr.dataset.uid)));
+}
+$("#fUserSearch").addEventListener("input", renderUsers);
+$("#umResetPass").addEventListener("click", ()=>{ $("#umPin").value="apotekku"; toast("Password diisi default — klik Simpan Akun"); });
+$("#umOutlet").addEventListener("input", ()=>{
+  if(userEditing) return;
+  const m = OUTLETS.find(o=>o.name===$("#umOutlet").value.trim());
+  if(m){ $("#umUser").value = m.name; if(!$("#umName").value.trim()) $("#umName").value = "Outlet "+shortOutletName(m.name); }
+});
+function openUserModal(id){
+  userEditing = id||null;
+  const u = id? db.users.find(x=>x.id===id):null;
+  $("#userModalTitle").textContent = u? "Edit Akun":"Tambah Akun";
+  $("#umName").value = u?u.name:"";
+  $("#umRole").value = u?u.role:"outlet";
+  $("#umDivisi").value = u&&u.divisi?u.divisi:"OPS";
+  $("#umOutlet").value = u&&u.outlet?u.outlet:"";
+  $("#umUser").value = u?(u.user||""):"";
+  $("#umPin").value = u?(u.pass||""):"apotekku";
+  $("#umDelete").style.display = u? "inline-flex":"none";
+  toggleUserFields();
+  $("#userModalBack").classList.add("open");
+}
+function toggleUserFields(){
+  const r = $("#umRole").value;
+  $("#umDivisiWrap").style.display = r==="ssc"?"":"none";
+  $("#umOutletWrap").style.display = r==="outlet"?"":"none";
+}
+$("#umRole").addEventListener("input", toggleUserFields);
+$("#btnUserAdd").addEventListener("click", ()=>openUserModal(null));
+$("#umSave").addEventListener("click", ()=>{
+  const name = $("#umName").value.trim();
+  if(!name){ toast("⚠ Nama akun wajib diisi"); return; }
+  const role = $("#umRole").value;
+  const uname = $("#umUser").value.trim();
+  if(!uname){ toast("⚠ Username wajib diisi"); return; }
+  if(db.users.some(x=>x.id!==userEditing && (x.user||"").toLowerCase()===uname.toLowerCase())){ toast("⚠ Username sudah dipakai akun lain"); return; }
+  const rec = { name, role, user:uname, pass:$("#umPin").value };
+  if(role==="ssc") rec.divisi = $("#umDivisi").value;
+  if(role==="outlet"){
+    const o = $("#umOutlet").value.trim();
+    if(!o){ toast("⚠ Pilih outlet untuk akun outlet"); return; }
+    rec.outlet = o;
+  }
+  if(userEditing){
+    const u = db.users.find(x=>x.id===userEditing);
+    if(u.role==="admin" && role!=="admin" && db.users.filter(x=>x.role==="admin").length<=1){ toast("⚠ Harus tersisa minimal 1 akun Admin"); return; }
+    Object.assign(u, {divisi:undefined, outlet:undefined}, rec);
+    if(currentUser && currentUser.id===u.id) currentUser=u;
+    toast("✓ Akun diperbarui");
+  } else {
+    db.users.push({ id:"u"+Date.now(), ...rec });
+    toast("✓ Akun ditambahkan");
+  }
+  save(); $("#userModalBack").classList.remove("open"); renderUsers(); applyAccess();
+});
+$("#umDelete").addEventListener("click", ()=>{
+  const u = db.users.find(x=>x.id===userEditing); if(!u) return;
+  if(u.role==="admin" && db.users.filter(x=>x.role==="admin").length<=1){ toast("⚠ Tidak bisa menghapus Admin terakhir"); return; }
+  if(currentUser && currentUser.id===u.id){ toast("⚠ Tidak bisa menghapus akun yang sedang dipakai"); return; }
+  if(!confirm("Hapus akun "+u.name+"?")) return;
+  db.users = db.users.filter(x=>x.id!==userEditing);
+  save(); $("#userModalBack").classList.remove("open"); renderUsers(); toast("Akun dihapus");
+});
+$("#umCancel").addEventListener("click", ()=>$("#userModalBack").classList.remove("open"));
+$("#userModalClose").addEventListener("click", ()=>$("#userModalBack").classList.remove("open"));
+$("#userModalBack").addEventListener("click", e=>{ if(e.target===e.currentTarget) $("#userModalBack").classList.remove("open"); });
+
+/* ---- ubah password sendiri ---- */
+function closePassModal(){ $("#passModalBack").classList.remove("open"); }
+$("#btnPass").addEventListener("click", ()=>{
+  if(!currentUser) return;
+  $("#cpOld").value=""; $("#cpNew").value=""; $("#cpNew2").value="";
+  $("#passModalBack").classList.add("open");
+});
+$("#cpSave").addEventListener("click", ()=>{
+  if(!currentUser) return;
+  if($("#cpOld").value !== (currentUser.pass||"")){ toast("⚠ Password lama salah"); return; }
+  const np = $("#cpNew").value;
+  if(np.length<4){ toast("⚠ Password baru minimal 4 karakter"); return; }
+  if(np !== $("#cpNew2").value){ toast("⚠ Ulangi password tidak sama"); return; }
+  const u = db.users.find(x=>x.id===currentUser.id);
+  u.pass = np; currentUser = u;
+  save(); closePassModal(); toast("✓ Password berhasil diubah");
+  if(isAdmin()) renderUsers();
+});
+$("#cpCancel").addEventListener("click", closePassModal);
+$("#passModalClose").addEventListener("click", closePassModal);
+$("#passModalBack").addEventListener("click", e=>{ if(e.target===e.currentTarget) closePassModal(); });
+
+/* ================= TAB SWITCHING ================= */
+function closeSidebar(){ $("#sidebar").classList.remove("open"); $("#sideBackdrop").classList.remove("show"); }
+$("#btnMenu").addEventListener("click", ()=>{ $("#sidebar").classList.add("open"); $("#sideBackdrop").classList.add("show"); });
+$("#sideBackdrop").addEventListener("click", closeSidebar);
+function switchView(name){
+  if(isOutlet() && OUTLET_HIDDEN_TABS.includes(name)) name = "dashboard";
+  closeSidebar();
+  $$(".tab-btn").forEach(b=>b.classList.toggle("active", b.dataset.view===name));
+  $$(".view").forEach(v=>v.classList.toggle("active", v.id==="view-"+name));
+  if(name==="dashboard") renderDashboard();
+  if(name==="temuan") applyFilters();
+  if(name==="prioritas") renderPrioritas();
+  if(name==="review") renderAktivitas();
+  if(name==="kpi") renderKpi();
+  if(name==="laporan") renderReport();
+}
+$$(".tab-btn").forEach(b=>b.addEventListener("click", ()=>switchView(b.dataset.view)));
+["fSearch","fOutlet","fDivisi","fStatus","fSort"].forEach(id=>{
+  $("#"+id).addEventListener("input", applyFilters);
+});
+
+/* ================= RENDER ALL / INIT ================= */
+function fillOutletSelectors(){
+  if(isOutlet()){
+    const o = currentUser.outlet;
+    $("#fOutlet").innerHTML = `<option value="${esc(o)}" selected>${esc(o)}</option>`;
+    $("#fOutlet").disabled = true;
+    $("#outletList").innerHTML = `<option value="${esc(o)}">`;
+    $("#masterOutletList").innerHTML = OUTLETS.map(x=>`<option value="${esc(x.name)}">${esc(x.code)}</option>`).join("");
+    return;
+  }
+  $("#fOutlet").disabled = false;
+  const used = outlets(); // outlet yang memiliki temuan
+  const cur = $("#fOutlet").value;
+  const master = OUTLETS.map(o=>o.name);
+  const extra = used.filter(n=>!master.includes(n)); // nama di data yang tidak ada di master
+  const withT = master.filter(n=>used.includes(n)).concat(extra);
+  const without = master.filter(n=>!used.includes(n));
+  const opt = o=>`<option value="${esc(o)}" ${o===cur?"selected":""}>${esc(o)}</option>`;
+  $("#fOutlet").innerHTML = '<option value="">Semua Outlet</option>'
+    + (withT.length?`<optgroup label="— Outlet dengan temuan (${withT.length}) —">${withT.map(opt).join("")}</optgroup>`:"")
+    + `<optgroup label="— Outlet lainnya (${without.length}) —">${without.map(opt).join("")}</optgroup>`;
+  // datalist temuan: master 82 outlet + nama lain yang sudah dipakai
+  const merged = [...new Set([...master, ...used])].sort();
+  $("#outletList").innerHTML = merged.map(o=>`<option value="${esc(o)}">`).join("");
+  $("#masterOutletList").innerHTML = OUTLETS.map(o=>`<option value="${esc(o.name)}">${esc(o.code)}</option>`).join("");
+}
+function renderAll(){
+  fillOutletSelectors();
+  $("#cntTemuan").textContent = visibleItems().length;
+  const curA = $("#fAudType").value;
+  $("#fAudType").innerHTML = '<option value="">Semua Jenis Audit</option>'+AUDIT_TYPES.map(t=>`<option value="${t.id}" ${t.id===curA?"selected":""}>${esc(t.name)}</option>`).join("");
+  const curK = $("#fKpiHist").value;
+  $("#fKpiHist").innerHTML = '<option value="">Semua KPI</option>'+KPIS.map(k=>`<option value="${k.id}" ${k.id===curK?"selected":""}>${esc(k.name)}</option>`).join("");
+  renderDashboard(); applyFilters(); renderPrioritas(); renderAktivitas(); renderKpi(); renderReport();
+}
+async function boot(){
+  renderStorageNote();
+  await initFirebase();
+  await load();
+  migrate();
+  save();
+  loadSession();
+  applyAccess();
+  renderAll();
+  renderStorageNote();
+  if(!currentUser) showLogin();
+}
+if(false){
+$("#storageNote").className = "storage-note"+(storageOk?"":" warn");
+$("#storageNote").innerHTML = storageOk
+  ? "💾 <b>Penyimpanan otomatis aktif.</b> Semua perubahan tersimpan di browser ini (localStorage). Data tidak dikirim ke internet — untuk berbagi antar manager atau backup, gunakan Ekspor/Impor JSON. Catatan: data terikat pada browser dan komputer ini; jika cache browser dibersihkan, data ikut terhapus, jadi rutinlah ekspor JSON."
+  : "⚠️ <b>Penyimpanan browser tidak tersedia di lingkungan ini.</b> Perubahan hanya bertahan selama halaman terbuka. Gunakan <b>Ekspor JSON</b> sebelum menutup halaman, lalu <b>Impor JSON</b> saat membuka kembali. Jika file ini dibuka langsung di Chrome/Edge dari komputer Anda, penyimpanan otomatis akan aktif.";
+loadSession();
+applyAccess();
+renderAll();
+if(!currentUser) showLogin();
+}
+boot();
+</script>
+</body>
+</html>
