@@ -811,7 +811,6 @@ let storageOk = false;
 try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); storageOk = true; }catch(e){ storageOk = false; }
 let db;
 const FIREBASE_FS_ROOT = { collection:"commandCenter", doc:"app" };
-const FIREBASE_FS_LEGACY = { collection:"commandCenter", doc:"sharedState" };
 const firebaseConfig = {
   apiKey: "AIzaSyDEOQF16MaCBWt2AakKTExM298YZiFGcPo",
   authDomain: "task-force-ose-command-center.firebaseapp.com",
@@ -843,39 +842,6 @@ function stripUndefined(value){
     return out;
   }
   return value === undefined ? undefined : value;
-}
-function serializeStructuredDb(data){
-  const snapshot = cloneData(data || {});
-  return {
-    meta: snapshot.meta || {},
-    items: snapshot.items || [],
-    audits: snapshot.audits || [],
-    acts: snapshot.acts || {},
-    kpi: snapshot.kpi || {targets:{}, entries:[]},
-    users: snapshot.users || [],
-    schema: {
-      version: 1,
-      shape: "structured-command-center",
-      updatedAt: snapshot.meta && snapshot.meta.lastSavedAt ? snapshot.meta.lastSavedAt : new Date().toISOString()
-    }
-  };
-}
-function deserializeStructuredDb(payload){
-  if(!payload || typeof payload !== "object") return null;
-  if(payload.data && typeof payload.data === "object") return cloneData(payload.data);
-  if(payload.sharedState && payload.sharedState.data && typeof payload.sharedState.data === "object"){
-    return cloneData(payload.sharedState.data);
-  }
-  const hasStructuredKeys = ["items","audits","acts","kpi","users","meta"].some(k=>Object.prototype.hasOwnProperty.call(payload, k));
-  if(!hasStructuredKeys) return null;
-  return {
-    items: Array.isArray(payload.items) ? cloneData(payload.items) : [],
-    audits: Array.isArray(payload.audits) ? cloneData(payload.audits) : [],
-    acts: payload.acts && typeof payload.acts==="object" ? cloneData(payload.acts) : {},
-    kpi: payload.kpi && typeof payload.kpi==="object" ? cloneData(payload.kpi) : {targets:{}, entries:[]},
-    users: Array.isArray(payload.users) ? cloneData(payload.users) : [],
-    meta: payload.meta && typeof payload.meta==="object" ? cloneData(payload.meta) : {visit:VISIT_LABEL}
-  };
 }
 function serializeRootDoc(data){
   return stripUndefined({
@@ -959,8 +925,7 @@ async function initFirebase(){
       getDoc,
       getDocs,
       setDoc,
-      rootRef: doc(store, FIREBASE_FS_ROOT.collection, FIREBASE_FS_ROOT.doc),
-      legacyRef: doc(store, FIREBASE_FS_LEGACY.collection, FIREBASE_FS_LEGACY.doc)
+      rootRef: doc(store, FIREBASE_FS_ROOT.collection, FIREBASE_FS_ROOT.doc)
     };
     firebaseState.status = "ready";
     firebaseState.message = "Data dapat disinkronkan antar perangkat melalui Cloud Firestore.";
@@ -999,8 +964,6 @@ async function loadFirestoreDb(){
       }
     };
   }
-  const legacySnap = await firebaseApi.getDoc(firebaseApi.legacyRef);
-  if(legacySnap.exists()) return deserializeStructuredDb(legacySnap.data());
   return null;
 }
 async function syncSubcollection(name, rows){
