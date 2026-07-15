@@ -595,6 +595,7 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
     </div>
     <div class="data-card">
       <h4>📥 Impor Data (JSON)</h4>
+      <p style="font-size:12px;color:var(--ink-soft)">Mendukung 2 format: <b>pembaruan temuan</b> (merge — aman, tidak menghapus/menurunkan status) dan backup penuh (mengganti seluruh data).</p>
       <p>Muat file JSON hasil ekspor. Data saat ini akan diganti.</p>
       <input type="file" id="importFile" accept=".json" style="display:none">
       <button class="btn btn-ghost" onclick="document.getElementById('importFile').click()">Pilih File JSON</button>
@@ -1814,18 +1815,65 @@ $("#btnExportJson").addEventListener("click", ()=>{
   toast("✓ JSON diunduh");
 });
 $("#importFile").addEventListener("change", e=>{
-  const f = e.target.files[0]; if(!f) return;
-  const rd = new FileReader();
-  rd.onload = ()=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
     try{
       const parsed = JSON.parse(rd.result);
-      if(!parsed.items || !Array.isArray(parsed.items)) throw 0;
-      db = parsed; migrate(); save(); renderAll(); toast("✓ Data berhasil diimpor ("+db.items.length+" temuan)");
-    }catch(err){ toast("⚠ File tidak valid — gunakan file hasil ekspor sistem ini"); }
+      if(parsed && parsed.type==="temuan-update" && Array.isArray(parsed.items)){
+        importTemuanUpdate(parsed);
+      } else if(parsed && parsed.items){
+        if(!confirm("File ini berformat backup penuh — SELURUH data (temuan, akun, KPI, integrasi) akan DIGANTI dengan isi file. Lanjutkan?")) { e.target.value=""; return; }
+        db = parsed; migrate(); save(); renderAll(); toast("✓ Data penuh diimpor ("+db.items.length+" temuan)");
+      } else toast("⚠ Format file tidak dikenali");
+    }catch(err){ toast("⚠ JSON tidak valid: "+err.message); }
     e.target.value="";
   };
   rd.readAsText(f);
 });
+/* Impor pembaruan temuan: MERGE, tidak pernah menghapus, tidak menurunkan status */
+const STATUS_RANK = {open:0, progress:1, done:2, verified:3};
+function importTemuanUpdate(payload){
+  if(!cloudReadOk && firebaseApi){ toast("⚠ Cloud belum terbaca — impor dibatalkan agar tidak menimpa data pusat. Muat ulang halaman dulu."); return; }
+  const now = new Date().toISOString();
+  let updated=0, added=0, skipped=0;
+  payload.items.forEach(inc=>{
+    const ex = db.items.find(i=>i.id===inc.id);
+    if(ex){
+      const ch=[];
+      const setIf=(field,label)=>{
+        const v=(inc[field]||"").trim ? String(inc[field]||"").trim() : (inc[field]||"");
+        if(v && v!==ex[field]){ ex[field]=v; ch.push(label); }
+      };
+      setIf("ca","CA"); setIf("pa","PA"); setIf("timeline","deadline");
+      setIf("pic","PIC"); setIf("vendor","vendor"); setIf("progres","progres"); setIf("bukti","bukti");
+      if(inc.divisi && inc.divisi!=="NONE" && (ex.divisi==="NONE"||!ex.divisi)){ ex.divisi=inc.divisi; ch.push("tim → "+inc.divisi); }
+      if(inc.status && STATUS_RANK[inc.status]>STATUS_RANK[ex.status||"open"] && ex.status!=="verified"){
+        ex.status=inc.status; ch.push("status → "+(STATUS[inc.status]?STATUS[inc.status].label:inc.status));
+      }
+      if(ch.length){
+        ex.updated=now;
+        ex.log=ex.log||[];
+        ex.log.push({t:now,msg:"Pembaruan dari "+(payload.source||"impor")+" ("+(payload.visit||"")+"): "+ch.join("; ")});
+        updated++;
+      } else skipped++;
+    } else {
+      const created=(inc.visitDate||todayStr())+"T02:00:00.000Z";
+      db.items.push({
+        id:inc.id||("t"+Date.now()+Math.floor(Math.random()*999)),
+        outlet:inc.outlet, temuan:inc.temuan+(inc.divExtra?" ("+inc.divExtra.replace(/^, /,"")+")":""),
+        ca:inc.ca||"", pa:inc.pa||"", timeline:inc.timeline||"",
+        divisi:inc.divisi||"NONE", pic:inc.pic||"", vendor:inc.vendor||"",
+        status:inc.status||"open", progres:inc.progres||"", bukti:inc.bukti||"",
+        foto:null, fotoTemuan:null, created, updated:now,
+        log:[{t:created,msg:"Temuan dicatat dari "+(payload.visit||"Kunjungan CEO")+(inc.visitDate?" ("+fmtDate(inc.visitDate)+")":"")}]
+      });
+      added++;
+    }
+  });
+  save(); renderAll();
+  toast("✓ Impor pembaruan: "+updated+" diperbarui, "+added+" temuan baru"+(skipped?", "+skipped+" tanpa perubahan":""));
+}
 $("#btnExportCsv").addEventListener("click", ()=>{
   const head = ["No","Nama Outlet","Temuan","Corrective Action","Preventive Action","Timeline","Tim","PIC","PIC Vendor","Status","Progres","Bukti Perbaikan","Update Terakhir"];
   const q = v=>'"'+String(v??"").replace(/"/g,'""')+'"';
