@@ -699,9 +699,22 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
       <div class="field"><label>Sync Frequency</label>
         <select id="cnFreq"><option value="harian">Harian</option><option value="per_jam">Per Jam</option><option value="mingguan">Mingguan</option></select>
       </div>
-      <div class="field full"><label>Nama Environment Variable API Key (server-side)</label><input id="cnEnv" placeholder="contoh: APIKEY_SISTEM_HG"></div>
+      <div class="field"><label>Header Name</label><input id="cnHeader" placeholder="X-API-Key"></div>
+      <div class="field"><label>Environment Variable API Key (server-side)</label><input id="cnEnv" placeholder="contoh: APIKEY_BSC_SYS"></div>
+      <div class="field full" id="cnEpWrap">
+        <label>Endpoint per Sistem (relatif terhadap Base URL — jangan ulangi path base)</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:4px">
+          <div class="field"><label style="font-size:10.5px">Health</label><input id="cnEpHealth" placeholder="/health"></div>
+          <div class="field"><label style="font-size:10.5px">Summary</label><input id="cnEpSummary" placeholder="/bsc/summary"></div>
+          <div class="field"><label style="font-size:10.5px">Outlets</label><input id="cnEpOutlets" placeholder="/outlets"></div>
+          <div class="field"><label style="font-size:10.5px">Priorities</label><input id="cnEpPriorities" placeholder="/bsc/priorities"></div>
+          <div class="field"><label style="font-size:10.5px">KPI</label><input id="cnEpKpis" placeholder="/bsc/kpis"></div>
+          <div class="field"><label style="font-size:10.5px">Action Plan</label><input id="cnEpActions" placeholder="/bsc/action-plans"></div>
+          <div class="field" id="cnEpFindingsWrap" style="grid-column:1/-1"><label style="font-size:10.5px">Findings (sistem generik)</label><input id="cnEpFindings" placeholder="/api/review-rutin/findings"></div>
+        </div>
+      </div>
       <div class="field full"><label>Field Mapping (JSON, opsional — kolom sumber → kolom standar)</label><textarea id="cnMap" placeholder='contoh: {"score":"nilai","outlet_id":"nama_outlet"}'></textarea></div>
-      <div class="hist" style="grid-column:1/-1">⚠ API key <b>tidak pernah</b> disimpan di halaman ini. Isi hanya <i>nama</i> environment variable; key sesungguhnya diset di server/gateway. Endpoint yang dipanggil: <code style="font-size:11px">{base_url}/api/review-rutin/findings</code></div>
+      <div class="hist" style="grid-column:1/-1">⚠ API key <b>tidak pernah</b> disimpan di halaman ini maupun database. Isi hanya <i>nama</i> environment variable — key sesungguhnya diset di server/gateway. Bila endpoint menuntut key saat Sinkron, sistem meminta key sekali untuk sesi ini saja (hanya di memori). URL dibentuk: <code style="font-size:11px">Base URL + endpoint</code>, segmen base tidak akan diduplikasi.</div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost btn-sm" id="cnTemplate">⬇ Template CSV</button>
@@ -1116,6 +1129,29 @@ function migrate(){
     if(!db.integrations.some(c=>c.id===id))
       db.integrations.push({id,name,team,internal:id==="capa_internal",baseUrl:"",authType:"api_key",keyEnv:"APIKEY_"+id.toUpperCase(),syncFreq:"harian",mapping:"",lastSync:null,status:id==="capa_internal"?"connected":"not_integrated",count:0,viaCsv:false});
   });
+  // Field konfigurasi per-connector (endpoint per sistem, bukan generik)
+  db.integrations.forEach(c=>{
+    if(c.headerName===undefined) c.headerName = "X-API-Key";
+    if(!c.endpoints) c.endpoints = {};
+    if(c.endpoints.findings===undefined && !c.internal) c.endpoints.findings = "/api/review-rutin/findings";
+  });
+  // Default khusus Sistem BSC Outlet (adapter bsc_v2) — hanya mengisi yang kosong
+  const bsc = db.integrations.find(c=>c.id==="bsc_sys");
+  if(bsc){
+    bsc.adapter = "bsc_v2";
+    if(!bsc.baseUrl || /\/reports\//.test(bsc.baseUrl)) bsc.baseUrl = "https://bscv2.apotekku.com/api/integration/v1";
+    bsc.authType = bsc.authType || "api_key";
+    bsc.headerName = bsc.headerName || "X-API-Key";
+    bsc.keyEnv = "APIKEY_BSC_SYS";
+    const ep = bsc.endpoints;
+    if(!ep.health) ep.health = "/health";
+    if(!ep.summary) ep.summary = "/bsc/summary";
+    if(!ep.outlets) ep.outlets = "/outlets";
+    if(!ep.priorities) ep.priorities = "/bsc/priorities";
+    if(!ep.kpis) ep.kpis = "/bsc/kpis";
+    if(!ep.actionPlans) ep.actionPlans = "/bsc/action-plans";
+    delete ep.findings; // BSC tidak memakai endpoint generik findings
+  }
   if(!db.users) db.users = [];
   // migrasi akun lama: pin → pass, isi username, lengkapi akun outlet dari master list
   const legacyUser = {admin:"admin", ssc_ops:"ops", ssc_qic:"qic", ssc_hgpga:"hgpga"};
@@ -1915,7 +1951,42 @@ const PARAMS = [
   {id:"capa_overdue", name:"CAPA Overdue", team:"QIC", sys:"capa_internal", unit:"", target:0, dir:"down"}
 ];
 function sysOf(id){ return SYSTEMS.find(x=>x.id===id); }
-function paramOf(id){ return PARAMS.find(p=>p.id===id || p.name.toLowerCase()===String(id).toLowerCase()); }
+const PARAM_ALIAS = { bsc_outlet:"bsc" }; // parameter dari sistem sumber → parameter internal
+function canonParam(id){ return PARAM_ALIAS[String(id)] || String(id); }
+function paramOf(id){
+  const key = PARAM_ALIAS[String(id)] || id;
+  return PARAMS.find(p=>p.id===key || p.name.toLowerCase()===String(key).toLowerCase());
+}
+/* Gabung base URL + path tanpa duplikasi segmen base (mis. /api/integration/v1 dua kali) */
+function joinUrl(base, path){
+  const b = String(base||"").replace(/\/+$/,"");
+  let p = String(path||"");
+  if(/^https?:\/\//i.test(p)) return p;
+  p = "/"+p.replace(/^\/+/,"");
+  try{
+    const bp = new URL(b).pathname.replace(/\/+$/,"");
+    if(bp && bp!=="/" && p.startsWith(bp+"/")) p = p.slice(bp.length); // cegah base path ganda
+  }catch(e){}
+  return b + p;
+}
+/* API key TIDAK PERNAH disimpan — hanya di memori sesi ini, hilang saat tab ditutup */
+const sessionApiKeys = {};
+function apiHeaders(cfg){
+  const h = {"Accept":"application/json"};
+  const key = sessionApiKeys[cfg.id];
+  if(key){
+    if(cfg.authType==="bearer") h["Authorization"] = "Bearer "+key;
+    else h[cfg.headerName||"X-API-Key"] = key;
+  }
+  return h;
+}
+function askSessionKey(cfg){
+  const k = prompt("Masukkan API key untuk "+cfg.name.split("(")[0].trim()+
+    "\n(header: "+(cfg.headerName||"X-API-Key")+", env server: "+(cfg.keyEnv||"-")+")\n"+
+    "Key hanya dipakai di sesi ini — TIDAK disimpan di browser maupun database.", "");
+  if(k && k.trim()){ sessionApiKeys[cfg.id]=k.trim(); return true; }
+  return false;
+}
 function connCfg(id){ return db.integrations.find(c=>c.id===id); }
 
 /* ---- wilayah dari alamat master outlet ---- */
@@ -1963,7 +2034,7 @@ function normStatus(score,target,dir){
   if(dir==="down") return v<=t?"baik":(v<=t*1.15||v<=t+1?"temuan":"kritis");
   return v>=t?"baik":(v>=t*0.94?"temuan":"kritis");
 }
-const RISK = {baik:{l:"Rendah",e:"🟢",chip:"chip-done"},temuan:{l:"Sedang",e:"🟡",chip:"chip-progress"},kritis:{l:"Tinggi",e:"🔴",chip:"chip-late"}};
+const RISK = {baik:{l:"Rendah",e:"🟢",chip:"chip-done"},temuan:{l:"Sedang",e:"🟡",chip:"chip-progress"},kritis:{l:"Tinggi",e:"🔴",chip:"chip-late"},no_data:{l:"No Data",e:"⚪",chip:"chip-none"}};
 
 /* ---- data internal (Command Center CAPA) ---- */
 function refreshInternalData(){
@@ -2024,22 +2095,130 @@ function ingest(records, sysId){
 }
 
 /* ---- sinkronisasi API ---- */
+async function fetchJson(cfg, url){
+  const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), 10000);
+  let res;
+  try{ res = await fetch(url, {signal:ctl.signal, headers:apiHeaders(cfg)}); }
+  finally{ clearTimeout(to); }
+  if(!res.ok){
+    const err = new Error("HTTP "+res.status);
+    err.status = res.status; err.url = url;
+    throw err;
+  }
+  return res.json();
+}
+function humanConnError(cfg, e, url){
+  if(e.name==="AbortError") return "Timeout 10 detik — server tidak merespons.";
+  if(e.status===401 || e.status===403)
+    return "API key BSC tidak valid atau belum tersedia di environment variable "+(cfg.keyEnv||"APIKEY_BSC_SYS")+".";
+  if(e.status===404){
+    console.warn("[integrasi] 404 — URL final yang dipanggil:", url); // tanpa API key
+    return "Endpoint tidak ditemukan (404). URL final dicatat di console log untuk diperiksa.";
+  }
+  if(String(e.message||"").includes("Failed to fetch"))
+    return "Gagal terhubung — kemungkinan CORS belum mengizinkan domain ini, atau server tidak dapat dijangkau.";
+  return String(e.message||e).slice(0,140);
+}
+function bscPeriod(){
+  const t = ($("#rvTo") && $("#rvTo").value) || todayStr();
+  return t.slice(0,7); // YYYY-MM
+}
+/* ---- Adapter BSC v2: normalisasi summary → format internal ---- */
+function bscNormalize(row, period){
+  const rawScore = row.bsc_score;
+  const score = (rawScore===null || rawScore===undefined || rawScore==="") ? null : Number(rawScore);
+  const target = (row.target_score!==null && row.target_score!==undefined && row.target_score!=="") ? Number(row.target_score) : 85;
+  const noData = score===null || String(row.status||"").toLowerCase()==="no_data";
+  let status, finding = "";
+  if(noData){
+    status = "no_data"; // JANGAN ubah no_data menjadi skor 0
+    finding = "Data BSC periode terpilih belum tersedia";
+  } else {
+    status = normStatus(score, target, "up");
+    if(score < 85) finding = "Nilai BSC belum mencapai standar minimal 85";
+  }
+  let outlet = String(row.outlet_name || row.outlet_id || "").trim();
+  const byCode = OUTLETS.find(o=>o.code.toLowerCase()===outlet.toLowerCase());
+  if(byCode) outlet = byCode.name;
+  return {
+    source_system: "bsc_v2",
+    source_record_id: "bsc-"+String(row.outlet_id||outlet)+"-"+String(row.period||period),
+    team: "OPS", team_source: "operational_gpp_excellence",
+    outlet_id: outlet || "(tidak diketahui)",
+    review_date: String(row.updated_at||"").slice(0,10) || todayStr(),
+    parameter: "bsc_outlet", // alias → internal "bsc"
+    score, target, status,
+    trend: row.trend ?? null,
+    finding,
+    evidence_url: "",
+    is_repeated: false,
+    period: String(row.period||period),
+    created_at: new Date().toISOString()
+  };
+}
+function upsertNormalized(records, sysStoreId){
+  let n = 0;
+  records.forEach(r=>{
+    const i = db.reviewData.findIndex(x=>x.source_system===r.source_system && x.source_record_id===r.source_record_id);
+    if(i>=0) db.reviewData[i] = r; else db.reviewData.push(r);
+    n++;
+  });
+  const cfg = connCfg(sysStoreId);
+  if(cfg){
+    const srcs = new Set(records.map(r=>r.source_system).concat([sysStoreId]));
+    cfg.count = db.reviewData.filter(x=>srcs.has(x.source_system)).length;
+  }
+  return n;
+}
+async function syncBsc(cfg){
+  const period = bscPeriod();
+  const urlHealth = joinUrl(cfg.baseUrl, (cfg.endpoints&&cfg.endpoints.health)||"/health");
+  const urlSummary = joinUrl(cfg.baseUrl, (cfg.endpoints&&cfg.endpoints.summary)||"/bsc/summary")+"?period="+period;
+  const urlPriorities = joinUrl(cfg.baseUrl, (cfg.endpoints&&cfg.endpoints.priorities)||"/bsc/priorities")+"?period="+period;
+  console.info("[BSC] health →", urlHealth);
+  console.info("[BSC] summary →", urlSummary);
+  try{
+    // 1) health
+    await fetchJson(cfg, urlHealth);
+    // 2) summary → normalisasi → simpan
+    const sum = await fetchJson(cfg, urlSummary);
+    const rows = Array.isArray(sum) ? sum : (sum.data || sum.records || []);
+    const normalized = rows.map(r=>bscNormalize(r, period));
+    upsertNormalized(normalized, cfg.id);
+    // 3) priorities → simpan untuk pembobotan outlet prioritas
+    try{
+      const pr = await fetchJson(cfg, urlPriorities);
+      const items = Array.isArray(pr) ? pr : (pr.data || pr.records || []);
+      db.meta.bscPriorities = { period, fetchedAt:new Date().toISOString(),
+        outlets: items.map(x=>String(x.outlet_name||x.outlet_id||"").trim()).filter(Boolean) };
+    }catch(e2){ console.warn("[BSC] priorities gagal:", humanConnError(cfg,e2,urlPriorities)); }
+    // 4) status
+    cfg.status = "connected"; cfg.lastSync = new Date().toISOString(); cfg.lastError = "";
+    return {ok:true, n:normalized.length, sample:normalized[0]||null, urlHealth, urlSummary};
+  }catch(e){
+    cfg.status = "failed";
+    cfg.lastError = humanConnError(cfg, e, e.url || urlHealth);
+    if((e.status===401||e.status===403) && !sessionApiKeys[cfg.id] && typeof prompt==="function"){
+      if(askSessionKey(cfg)) return syncBsc(cfg); // ulangi sekali dengan key sesi
+    }
+    return {ok:false, why:cfg.lastError, urlHealth, urlSummary};
+  }
+}
 async function syncConnector(id){
   const c = connCfg(id);
   if(c.internal){ refreshInternalData(); return {ok:true}; }
   if(!c.baseUrl){ c.status="not_integrated"; return {ok:false, why:"Belum dikonfigurasi"}; }
+  if(c.adapter==="bsc_v2") return syncBsc(c);
+  // ---- konektor generik: endpoint findings per-sistem ----
+  const url = joinUrl(c.baseUrl, (c.endpoints&&c.endpoints.findings)||"/api/review-rutin/findings")+"?system="+id;
   try{
-    const ctl = new AbortController(); const to=setTimeout(()=>ctl.abort(),8000);
-    const res = await fetch(c.baseUrl.replace(/\/+$/,"")+"/api/review-rutin/findings?system="+id, {signal:ctl.signal, headers:{"Accept":"application/json"}});
-    clearTimeout(to);
-    if(!res.ok) throw new Error("HTTP "+res.status);
-    const data = await res.json();
+    const data = await fetchJson(c, url);
     const arr = Array.isArray(data)? data : (data.records||data.data||[]);
     ingest(arr, id);
-    c.status="connected"; c.lastSync=new Date().toISOString();
+    c.status="connected"; c.lastSync=new Date().toISOString(); c.lastError="";
     return {ok:true, n:arr.length};
   }catch(e){
-    c.status="failed"; c.lastError=String(e.message||e).slice(0,120); c.lastSync=c.lastSync||null;
+    c.status="failed"; c.lastError = humanConnError(c, e, url);
     return {ok:false, why:c.lastError};
   }
 }
@@ -2104,14 +2283,14 @@ function downloadCsvTemplate(){
 
 /* ---- agregasi parameter ---- */
 function paramAgg(p, recs){
-  const rows = recs.filter(r=>r.parameter===p.id);
+  const rows = recs.filter(r=>canonParam(r.parameter)===p.id);
   if(!rows.length) return null;
   const byOutlet={};
   rows.forEach(r=>{ const k=r.outlet_id; if(!byOutlet[k]||byOutlet[k].review_date<r.review_date) byOutlet[k]=r; });
   const latest=Object.values(byOutlet);
   const scored=latest.filter(r=>r.score!==null&&!isNaN(r.score));
   const avg = scored.length? scored.reduce((a,r)=>a+Number(r.score),0)/scored.length : null;
-  const bad = latest.filter(r=>r.status!=="baik");
+  const bad = latest.filter(r=>r.status!=="baik" && r.status!=="no_data");
   const dates=[...new Set(rows.map(r=>r.review_date))].sort();
   const series=dates.map(d=>{ const dr=rows.filter(r=>r.review_date===d&&r.score!==null); return dr.length? dr.reduce((a,r)=>a+Number(r.score),0)/dr.length : null; }).filter(v=>v!==null);
   const lastUpd = rows.map(r=>r.review_date).sort().pop();
@@ -2128,9 +2307,10 @@ function trendSvg(series, color){
 function outletPriorities(recs){
   const latestBy={}; // outlet -> {param: rec}
   recs.forEach(r=>{ if(r.outlet_id==="(agregat)") return;
+    const pk = canonParam(r.parameter);
     latestBy[r.outlet_id]=latestBy[r.outlet_id]||{};
-    const cur=latestBy[r.outlet_id][r.parameter];
-    if(!cur||cur.review_date<r.review_date) latestBy[r.outlet_id][r.parameter]=r; });
+    const cur=latestBy[r.outlet_id][pk];
+    if(!cur||cur.review_date<r.review_date) latestBy[r.outlet_id][pk]=r; });
   db.items.filter(isOverdue).forEach(it=>{ latestBy[it.outlet]=latestBy[it.outlet]||{}; });
   return Object.entries(latestBy).map(([o,ps])=>{
     const g=id=>ps[id]?Number(ps[id].score):null;
@@ -2144,6 +2324,7 @@ function outletPriorities(recs){
     if(svc!==null&&svc<95) sc+=(95-svc)*0.5;
     if(sku!==null&&sku<95) sc+=(95-sku)*0.4;
     sc+=rep*5+ovd*4;
+    if(db.meta.bscPriorities && (db.meta.bscPriorities.outlets||[]).some(n=>n.toLowerCase()===o.toLowerCase())) sc+=10; // ditandai prioritas oleh Sistem BSC
     const lvl = sc>=30?"kritis":sc>=15?"tinggi":sc>=5?"sedang":"normal";
     return {o,bsc,audit,comp,svc,sku,rep,ovd,sc:Math.round(sc),lvl};
   }).sort((a,b)=>b.sc-a.sc);
@@ -2289,7 +2470,7 @@ function renderRvFindings(){
   const recs = rvFiltered().filter(r=>r.finding);
   const q=$("#rvFindSearch").value.toLowerCase(), fr=$("#rvFindRisk").value, rep=$("#rvFindRepeat").checked;
   let list = recs.filter(r=>{
-    if(rvDrillParam && r.parameter!==rvDrillParam) return false;
+    if(rvDrillParam && canonParam(r.parameter)!==canonParam(rvDrillParam)) return false;
     if(fr && r.status!==fr) return false;
     if(rep && !r.is_repeated) return false;
     if(q && !(r.outlet_id+" "+r.finding+" "+r.parameter).toLowerCase().includes(q)) return false;
@@ -2302,7 +2483,7 @@ function renderRvFindings(){
     return `<tr style="cursor:default">
       <td style="white-space:nowrap">${fmtDate(r.review_date)}</td>
       <td>${esc(r.outlet_id)}</td>
-      <td style="font-size:11.5px">${esc((sysOf(r.source_system)||{name:r.source_system}).name.split("(")[0].trim())}</td>
+      <td style="font-size:11.5px">${esc(r.source_system==="bsc_v2" ? "Sistem BSC Outlet (bsc_v2)" : (sysOf(r.source_system)||{name:r.source_system}).name.split("(")[0].trim())}</td>
       <td><span class="chip ${DIVISI[r.team]?DIVISI[r.team].chip:'chip-none'}">${r.team==="QIC"?"QI & C":esc(r.team)}</span></td>
       <td>${esc(p?p.name:r.parameter)}</td>
       <td class="temuan-cell">${esc(r.finding)}</td>
@@ -2385,7 +2566,14 @@ function openConnModal(id){
   $("#cnName").value=c.name; $("#cnBase").value=c.baseUrl||"";
   $("#cnAuth").value=c.authType||"api_key"; $("#cnFreq").value=c.syncFreq||"harian";
   ssRefresh("cnAuth"); ssRefresh("cnFreq");
+  $("#cnHeader").value=c.headerName||"X-API-Key";
   $("#cnEnv").value=c.keyEnv||""; $("#cnMap").value=c.mapping||"";
+  const ep=c.endpoints||{};
+  $("#cnEpHealth").value=ep.health||""; $("#cnEpSummary").value=ep.summary||"";
+  $("#cnEpOutlets").value=ep.outlets||""; $("#cnEpPriorities").value=ep.priorities||"";
+  $("#cnEpKpis").value=ep.kpis||""; $("#cnEpActions").value=ep.actionPlans||"";
+  $("#cnEpFindings").value=ep.findings||"";
+  $("#cnEpFindingsWrap").style.display = c.adapter==="bsc_v2" ? "none" : "";
   $("#connModalBack").classList.add("open");
 }
 function closeConnModal(){ $("#connModalBack").classList.remove("open"); connEditing=null; }
@@ -2393,7 +2581,16 @@ $("#cnSave").addEventListener("click", ()=>{
   const c=connCfg(connEditing); if(!c) return;
   if($("#cnMap").value.trim()){ try{ JSON.parse($("#cnMap").value); }catch(e){ toast("⚠ Field mapping bukan JSON valid"); return; } }
   c.baseUrl=$("#cnBase").value.trim(); c.authType=$("#cnAuth").value; c.syncFreq=$("#cnFreq").value;
+  c.headerName=$("#cnHeader").value.trim()||"X-API-Key";
   c.keyEnv=$("#cnEnv").value.trim(); c.mapping=$("#cnMap").value.trim();
+  c.endpoints = c.endpoints||{};
+  c.endpoints.health=$("#cnEpHealth").value.trim();
+  c.endpoints.summary=$("#cnEpSummary").value.trim();
+  c.endpoints.outlets=$("#cnEpOutlets").value.trim();
+  c.endpoints.priorities=$("#cnEpPriorities").value.trim();
+  c.endpoints.kpis=$("#cnEpKpis").value.trim();
+  c.endpoints.actionPlans=$("#cnEpActions").value.trim();
+  if(c.adapter!=="bsc_v2") c.endpoints.findings=$("#cnEpFindings").value.trim();
   if(!c.baseUrl && !c.viaCsv) c.status="not_integrated";
   save(); closeConnModal(); renderAktivitas(); toast("✓ Konfigurasi connector disimpan");
 });
