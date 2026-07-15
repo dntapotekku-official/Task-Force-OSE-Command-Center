@@ -1,0 +1,123 @@
+rules_version = '2';
+
+// =====================================================================
+// APOTEKKU — Task Force OSE Command Center
+// Aturan akses Cloud Firestore
+//
+// KONTEKS PENTING:
+// Aplikasi ini belum memakai Firebase Authentication. Login username/password
+// dijalankan di sisi browser, sehingga Firestore TIDAK BISA mengenali siapa
+// yang menulis. Karena itu aturan di bawah hanya bisa membatasi BENTUK data,
+// bukan SIAPA penulisnya.
+//
+// Pilih salah satu opsi di bawah sesuai kebutuhan Anda saat ini.
+// =====================================================================
+
+
+// ---------------------------------------------------------------------
+// OPSI A — SEMENTARA (dipakai sekarang, tanpa Firebase Auth)
+// Lebih aman dari "allow read, write: if true" karena:
+//   - hanya mengizinkan path aplikasi ini (bukan seluruh database)
+//   - menolak dokumen berukuran tidak wajar (mencegah abuse/spam)
+//   - membatasi nama sub-koleksi yang boleh ditulis
+// Batasannya: siapa pun yang tahu URL & config tetap bisa baca/tulis.
+// Gunakan hanya sampai Opsi B siap.
+// ---------------------------------------------------------------------
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Root dokumen aplikasi
+    match /commandCenter/app {
+      allow read: if true;
+      allow write: if request.resource.data.keys().hasOnly(['meta', 'kpiTargets', 'schema']);
+
+      // Sub-koleksi yang dikenali aplikasi
+      match /{sub}/{docId} {
+        allow read: if true;
+        allow write: if sub in ['items', 'audits', 'users', 'acts', 'kpiEntries', 'reviewData', 'integrations']
+                     && request.resource.data.size() < 60;
+        allow delete: if sub in ['items', 'audits', 'users', 'acts', 'kpiEntries', 'reviewData', 'integrations'];
+      }
+    }
+
+    // Tolak seluruh path lain
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+
+// =====================================================================
+// OPSI B — TARGET AKHIR (setelah memakai Firebase Authentication)
+//
+// Langkah yang perlu dilakukan lebih dulu:
+//   1. Firebase Console → Authentication → aktifkan "Email/Password"
+//      (username outlet dipetakan jadi email teknis, contoh:
+//       apotekku-kamasan@apotekku.internal)
+//   2. Buat 1 dokumen profil per user di koleksi /profiles/{uid} berisi:
+//        { role: "admin" | "ssc" | "outlet", divisi: "OPS|QIC|HGPGA", outlet: "APOTEKKU ..." }
+//      Dokumen ini HANYA boleh ditulis dari Firebase Console / Admin SDK.
+//   3. Ganti aturan di bawah menjadi aktif (hapus komentar), lalu hapus Opsi A.
+//
+// Dengan Opsi B, pembatasan peran menjadi NYATA di database:
+// outlet benar-benar tidak bisa menulis data outlet lain, meski lewat kode.
+// =====================================================================
+//
+// service cloud.firestore {
+//   match /databases/{database}/documents {
+//
+//     function signedIn()  { return request.auth != null; }
+//     function profile()   { return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data; }
+//     function isAdmin()   { return signedIn() && profile().role == 'admin'; }
+//     function isSSC()     { return signedIn() && profile().role == 'ssc'; }
+//     function isQIC()     { return isSSC() && profile().divisi == 'QIC'; }
+//     function isOutlet()  { return signedIn() && profile().role == 'outlet'; }
+//     function myOutlet()  { return profile().outlet; }
+//
+//     // Profil peran: hanya bisa dibaca pemiliknya & admin, ditulis lewat Console/Admin SDK
+//     match /profiles/{uid} {
+//       allow read:  if signedIn() && (request.auth.uid == uid || isAdmin());
+//       allow write: if false;
+//     }
+//
+//     match /commandCenter/app {
+//       allow read:  if signedIn();
+//       allow write: if isAdmin() || isSSC();
+//
+//       // TEMUAN & CAPA
+//       match /items/{docId} {
+//         allow read: if isAdmin() || isSSC() || (isOutlet() && resource.data.outlet == myOutlet());
+//
+//         // Outlet hanya boleh menulis temuan outletnya sendiri,
+//         // tidak boleh memindahkan outlet, dan tidak boleh memverifikasi.
+//         allow create: if isAdmin() || isSSC()
+//                       || (isOutlet() && request.resource.data.outlet == myOutlet()
+//                           && request.resource.data.status != 'verified');
+//         allow update: if isAdmin() || isSSC()
+//                       || (isOutlet()
+//                           && resource.data.outlet == myOutlet()
+//                           && request.resource.data.outlet == myOutlet()
+//                           && request.resource.data.status != 'verified'
+//                           && request.resource.data.divisi == resource.data.divisi);
+//         allow delete: if isAdmin();
+//       }
+//
+//       // AKUN: hanya admin
+//       match /users/{docId} {
+//         allow read:  if isAdmin();
+//         allow write: if isAdmin();
+//       }
+//
+//       // KPI, integrasi, data review: tim SSC & admin
+//       match /{sub}/{docId} {
+//         allow read:  if signedIn();
+//         allow write: if isAdmin() || isSSC();
+//       }
+//     }
+//
+//     match /{document=**} {
+//       allow read, write: if false;
+//     }
+//   }
+// }
