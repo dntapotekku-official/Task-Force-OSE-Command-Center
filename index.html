@@ -1140,8 +1140,8 @@ function migrate(){
   if(bsc){
     bsc.adapter = "bsc_v2";
     if(!bsc.baseUrl || /\/reports\//.test(bsc.baseUrl)) bsc.baseUrl = "https://bscv2.apotekku.com/api/integration/v1";
-    bsc.authType = bsc.authType || "api_key";
-    bsc.headerName = bsc.headerName || "X-API-Key";
+    bsc.authType = "api_key";      // spesifikasi BSC: API Key Header (menimpa sisa konfigurasi lama)
+    bsc.headerName = "X-API-Key";  // spesifikasi BSC: nama header wajib
     bsc.keyEnv = "APIKEY_BSC_SYS";
     const ep = bsc.endpoints;
     if(!ep.health) ep.health = "/health";
@@ -2177,9 +2177,16 @@ async function syncBsc(cfg){
   const urlPriorities = joinUrl(cfg.baseUrl, (cfg.endpoints&&cfg.endpoints.priorities)||"/bsc/priorities")+"?period="+period;
   console.info("[BSC] health →", urlHealth);
   console.info("[BSC] summary →", urlSummary);
+  let healthNote = "";
   try{
-    // 1) health
-    await fetchJson(cfg, urlHealth);
+    // 1) health — bersifat advisory: kegagalan dicatat, sinkron tetap lanjut ke summary
+    try{
+      await fetchJson(cfg, urlHealth);
+    }catch(eh){
+      if(eh.status===401||eh.status===403) throw eh; // masalah key: hentikan dengan pesan yang tepat
+      healthNote = "Health check gagal ("+humanConnError(cfg,eh,urlHealth)+") — kemungkinan /health belum diberi header CORS; sinkron dilanjutkan ke summary.";
+      console.warn("[BSC]", healthNote);
+    }
     // 2) summary → normalisasi → simpan
     const sum = await fetchJson(cfg, urlSummary);
     const rows = Array.isArray(sum) ? sum : (sum.data || sum.records || []);
@@ -2193,11 +2200,14 @@ async function syncBsc(cfg){
         outlets: items.map(x=>String(x.outlet_name||x.outlet_id||"").trim()).filter(Boolean) };
     }catch(e2){ console.warn("[BSC] priorities gagal:", humanConnError(cfg,e2,urlPriorities)); }
     // 4) status
-    cfg.status = "connected"; cfg.lastSync = new Date().toISOString(); cfg.lastError = "";
-    return {ok:true, n:normalized.length, sample:normalized[0]||null, urlHealth, urlSummary};
+    cfg.status = "connected"; cfg.lastSync = new Date().toISOString();
+    cfg.lastError = healthNote; // tampil sebagai catatan kecil di tabel bila ada
+    return {ok:true, n:normalized.length, sample:normalized[0]||null, urlHealth, urlSummary, healthNote};
   }catch(e){
     cfg.status = "failed";
-    cfg.lastError = humanConnError(cfg, e, e.url || urlHealth);
+    const failedUrl = e.url || urlSummary;
+    const which = String(failedUrl).includes("/health") ? "health" : (String(failedUrl).includes("summary") ? "summary" : "priorities");
+    cfg.lastError = "["+which+"] "+humanConnError(cfg, e, failedUrl);
     if((e.status===401||e.status===403) && !sessionApiKeys[cfg.id] && typeof prompt==="function"){
       if(askSessionKey(cfg)) return syncBsc(cfg); // ulangi sekali dengan key sesi
     }
