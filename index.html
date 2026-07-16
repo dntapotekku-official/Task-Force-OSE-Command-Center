@@ -1202,6 +1202,32 @@ function migrate(){
   // pastikan username unik
   const seen = {};
   db.users.forEach(u=>{ let key=u.user.toLowerCase(); while(seen[key]){ u.user=u.user+"2"; key=u.user.toLowerCase(); } seen[key]=1; });
+  // Koreksi data BSC lama: record bsc_v2 yang masih berisi POIN MENTAH → KONVERSI (%).
+  // Deteksi per periode: bila ada score>100, seluruh batch periode itu pasti poin mentah.
+  {
+    const byPeriod = {};
+    db.reviewData.filter(r=>r.source_system==="bsc_v2").forEach(r=>{
+      const key = r.period || "";
+      (byPeriod[key]=byPeriod[key]||[]).push(r);
+    });
+    Object.values(byPeriod).forEach(rs=>{
+      const scores = rs.map(r=>Number(r.score)).filter(v=>!isNaN(v));
+      if(!scores.length || Math.max(...scores)<=100) return; // sudah konversi / kosong
+      const ptsOf = r=>Number((r.points!==undefined&&r.points!==null)?r.points:r.score);
+      const best = Math.max(...rs.map(ptsOf).filter(v=>!isNaN(v)));
+      if(!(best>0)) return;
+      rs.forEach(r=>{
+        if(r.score===null||r.score===undefined) return; // no_data biarkan
+        const pts = ptsOf(r); if(isNaN(pts)) return;
+        r.points = pts; r.best_points = best;
+        r.score = Math.round(pts/best*1000)/10;
+        r.target = 85;
+        r.status = normStatus(r.score, 85, "up");
+        r.finding = r.score<85 ? "Konversi BSC "+fmtVal(r.score,"%")+" — belum mencapai standar minimal 85% dari outlet terbaik" : "";
+      });
+      console.info("[BSC] migrasi: "+rs.length+" record poin mentah dikonversi ke % (best "+best+")");
+    });
+  }
   if(!db.kpi) db.kpi = {targets:{}, entries:[]};
   if(!db.kpi.targets) db.kpi.targets = {};
   if(!db.kpi.entries) db.kpi.entries = [];
