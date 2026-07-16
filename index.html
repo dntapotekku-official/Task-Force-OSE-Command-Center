@@ -296,6 +296,13 @@ tbody tr.overdue-row:hover{background:#fae7e3}
 .dash-rv{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:15px 18px}
 .dash-rv .row{display:flex;flex-wrap:wrap;gap:10px 22px;font-size:13px;align-items:center}
 
+/* ======= Kolom Foto (thumbnail) ======= */
+.foto-pair{display:flex;gap:5px;align-items:center}
+.foto-th{width:42px;height:42px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer;display:block;transition:transform .1s}
+.foto-th:hover{transform:scale(1.12);box-shadow:0 3px 10px rgba(110,15,24,.2)}
+.foto-empty{width:42px;height:42px;border:1.5px dashed #d9cccd;border-radius:8px;display:grid;place-items:center;color:var(--ink-faint);font-size:14px;background:var(--paper)}
+.foto-lbl{font-size:8.5px;color:var(--ink-faint);text-align:center;margin-top:2px;letter-spacing:.3px}
+
 /* ======= Penampil Foto ======= */
 .pv-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media(max-width:700px){.pv-grid{grid-template-columns:1fr}}
@@ -468,7 +475,7 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
   </div>
   <div class="table-wrap"><table>
     <thead><tr>
-      <th style="width:34px">No</th><th>Outlet</th><th>Temuan</th><th>Tim</th><th>Corrective Action</th><th>PIC</th><th>Deadline</th><th>Status</th>
+      <th style="width:34px">No</th><th>Outlet</th><th>Temuan</th><th style="width:104px">Foto Temuan vs Bukti</th><th>Tim</th><th>Corrective Action</th><th>PIC</th><th>Deadline</th><th>Status</th>
     </tr></thead>
     <tbody id="temuanBody"></tbody>
   </table></div>
@@ -1501,15 +1508,16 @@ function renderTemuanTable(list){
     return `<tr data-id="${it.id}" class="${od?'overdue-row':''}">
       <td class="muted">${idx+1}</td>
       <td style="white-space:nowrap">${esc(it.outlet)}</td>
-      <td class="temuan-cell">${esc(it.temuan)}${(it.fotoTemuan||it.foto)?` <button class="mini-act btn-foto" data-id="${it.id}" title="Lihat foto temuan & bukti perbaikan">📷 Foto</button>`:""}</td>
+      <td class="temuan-cell">${esc(it.temuan)}</td>
+      <td>${fotoCellHtml(it)}</td>
       <td><span class="chip ${DIVISI[it.divisi].chip}">${it.divisi==="NONE"?"⚠ Belum ada":(it.divisi==="QIC"?"QI & C":esc(it.divisi))}</span></td>
       <td class="temuan-cell" style="max-width:250px">${it.ca?esc(it.ca):'<span class="muted">— belum diisi</span>'}</td>
       <td>${it.pic?esc(it.pic):'<span class="muted">—</span>'}</td>
       <td class="${dueCls}" style="white-space:nowrap">${fmtDate(it.timeline)}${dueNote}</td>
       <td>${st}</td></tr>`;
-  }).join("") : `<tr><td colspan="8" class="empty">Tidak ada temuan yang cocok dengan filter.</td></tr>`;
+  }).join("") : `<tr><td colspan="9" class="empty">Tidak ada temuan yang cocok dengan filter.</td></tr>`;
   $$("#temuanBody tr[data-id]").forEach(bindRow);
-  $$(".btn-foto").forEach(b=>b.addEventListener("click", e=>{ e.stopPropagation(); openPhotoView(b.dataset.id); }));
+  $$("#temuanBody .foto-pair[data-id]").forEach(c=>c.addEventListener("click", e=>{ e.stopPropagation(); openPhotoView(c.dataset.id); }));
 }
 
 /* ================= RENDER: PRIORITAS ================= */
@@ -2641,6 +2649,16 @@ $("#btnCooCopy").addEventListener("click", async()=>{
   try{ await navigator.clipboard.writeText(txt); toast("✓ Morning Brief COO disalin"); }
   catch(e){ const ta=document.createElement("textarea"); ta.value=txt; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); toast("✓ Morning Brief COO disalin"); }
 });
+
+/* ---- sel kolom foto: thumbnail temuan | bukti ---- */
+function fotoCellHtml(it){
+  if(!it.fotoTemuan && !it.foto) return '<span class="muted" style="font-size:11.5px">—</span>';
+  const th = (src, lbl, emo)=> src
+    ? `<div><img class="foto-th" src="${src}" alt="${lbl}" title="${lbl} — klik untuk memperbesar"><div class="foto-lbl">${lbl}</div></div>`
+    : `<div><div class="foto-empty" title="${lbl} belum ada">${emo}</div><div class="foto-lbl">${lbl}</div></div>`;
+  return `<div class="foto-pair" data-id="${it.id}" title="Klik untuk melihat foto ukuran penuh">
+    ${th(it.fotoTemuan,"Temuan","📷")}${th(it.foto,"Bukti","🖼️")}</div>`;
+}
 
 /* ---- penampil foto temuan & bukti ---- */
 function openPhotoView(id){
