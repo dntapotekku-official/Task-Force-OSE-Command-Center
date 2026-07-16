@@ -897,7 +897,7 @@ const OUTLETS = [{"code":"APK-001","name":"APOTEKKU 9 RENON"},{"code":"APK-002",
 
 /* ================= KPI TEAM ================= */
 const KPIS = [
-  {id:"bsc", name:"BSC Outlet", unit:"", target:85, dir:"up", owner:"OPS", support:"QIC", color:"#BE1F2D"},
+  {id:"bsc", name:"BSC Outlet (Konversi)", unit:"%", target:85, dir:"up", owner:"OPS", support:"QIC", color:"#BE1F2D"},
   {id:"complaint", name:"Complaint Rate", unit:"%", target:2, dir:"down", owner:"QIC", support:"OPS", color:"#0e6b5c"},
   {id:"service", name:"Service Standard", unit:"%", target:95, dir:"up", owner:"OPS", support:"HGPGA", color:"#2e6f9e"},
   {id:"sku", name:"SKU Ready All Pareto", unit:"%", target:95, dir:"up", owner:"OPS", support:"QIC", color:"#dd9a2b"},
@@ -2016,7 +2016,7 @@ const PARAMS = [
   {id:"joblist", name:"Joblist", team:"OPS", sys:"ops_daily", unit:"%", target:100, dir:"up"},
   {id:"huddle", name:"Huddle", team:"OPS", sys:"ops_daily", unit:"%", target:100, dir:"up"},
   {id:"operan", name:"Operan Shift", team:"OPS", sys:"ops_daily", unit:"%", target:100, dir:"up"},
-  {id:"bsc", name:"BSC Outlet", team:"OPS", sys:"bsc_sys", unit:"", target:85, dir:"up"},
+  {id:"bsc", name:"BSC Outlet (Konversi)", team:"OPS", sys:"bsc_sys", unit:"%", target:85, dir:"up"},
   {id:"gpp", name:"Good Pharmaceutical Practice", team:"OPS", sys:"gpp_sys", unit:"", target:90, dir:"up"},
   {id:"quick_audit", name:"Quick Audit", team:"OPS", sys:"gpp_sys", unit:"", target:90, dir:"up"},
   {id:"service", name:"Service Standard", team:"OPS", sys:"pos", unit:"%", target:95, dir:"up"},
@@ -2205,19 +2205,37 @@ function bscPeriod(){
   const t = ($("#rvTo") && $("#rvTo").value) || todayStr();
   return t.slice(0,7); // YYYY-MM
 }
-/* ---- Adapter BSC v2: normalisasi summary → format internal ---- */
-function bscNormalize(row, period){
-  const rawScore = row.bsc_score;
-  const score = (rawScore===null || rawScore===undefined || rawScore==="") ? null : Number(rawScore);
-  const target = (row.target_score!==null && row.target_score!==undefined && row.target_score!=="") ? Number(row.target_score) : 85;
+/* ---- Adapter BSC v2: normalisasi summary → format internal ----
+   Nilai BSC yang dipakai = KONVERSI (%) — persentase terhadap outlet terbaik,
+   sesuai Rapot BSC (mis. rata-rata konversi 77.7%). Bukan poin mentah. */
+function bscExplicitConversion(row){
+  const cand = [row.conversion, row.conversion_rate, row.conversion_pct, row.konversi, row.conversion_percentage];
+  for(const c of cand){
+    if(c!==undefined && c!==null && c!==""){
+      const v = Number(String(c).replace("%",""));
+      if(!isNaN(v)) return v<=1 ? v*100 : v; // dukung pecahan 0–1 maupun persen
+    }
+  }
+  return null;
+}
+function bscNormalize(row, period, bestPoints){
+  const rawPts = (row.bsc_score===null||row.bsc_score===undefined||row.bsc_score==="") ? null : Number(row.bsc_score);
+  let score = bscExplicitConversion(row); // 1) pakai field konversi dari API bila ada
+  if(score===null && rawPts!==null && !isNaN(rawPts)){
+    // 2) hitung sendiri: poin outlet ÷ poin outlet terbaik pada batch ini
+    if(bestPoints && bestPoints>0) score = Math.round(rawPts/bestPoints*1000)/10;
+    else if(rawPts<=100) score = rawPts; // sudah berbentuk persen
+  }
+  const target = 85; // target konversi minimal (%)
   const noData = score===null || String(row.status||"").toLowerCase()==="no_data";
   let status, finding = "";
   if(noData){
     status = "no_data"; // JANGAN ubah no_data menjadi skor 0
+    score = null;
     finding = "Data BSC periode terpilih belum tersedia";
   } else {
     status = normStatus(score, target, "up");
-    if(score < 85) finding = "Nilai BSC belum mencapai standar minimal 85";
+    if(score < 85) finding = "Konversi BSC "+fmtVal(score,"%")+" — belum mencapai standar minimal 85% dari outlet terbaik";
   }
   let outlet = String(row.outlet_name || row.outlet_id || "").trim();
   const byCode = OUTLETS.find(o=>o.code.toLowerCase()===outlet.toLowerCase());
@@ -2230,6 +2248,8 @@ function bscNormalize(row, period){
     review_date: String(row.updated_at||"").slice(0,10) || todayStr(),
     parameter: "bsc_outlet", // alias → internal "bsc"
     score, target, status,
+    points: (rawPts!==null && !isNaN(rawPts)) ? rawPts : null, // poin mentah utk penelusuran
+    best_points: bestPoints || null,
     trend: row.trend ?? null,
     finding,
     evidence_url: "",
@@ -2272,7 +2292,10 @@ async function syncBsc(cfg){
     // 2) summary → normalisasi → simpan
     const sum = await fetchJson(cfg, urlSummary);
     const rows = Array.isArray(sum) ? sum : (sum.data || sum.records || []);
-    const normalized = rows.map(r=>bscNormalize(r, period));
+    // poin outlet terbaik pada batch — dasar perhitungan konversi bila API tidak mengirim field konversi
+    const pts = rows.map(r=>Number(r.bsc_score)).filter(v=>!isNaN(v) && v!==null);
+    const bestPoints = pts.length ? Math.max(...pts) : null;
+    const normalized = rows.map(r=>bscNormalize(r, period, bestPoints));
     upsertNormalized(normalized, cfg.id);
     // 3) priorities → simpan untuk pembobotan outlet prioritas
     try{
