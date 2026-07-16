@@ -931,6 +931,8 @@ const firebaseState = { status:"idle", message:"Firebase belum diinisialisasi." 
    Dipakai untuk menulis HANYA dokumen yang diubah sesi ini. Tanpa ini, setiap save
    menulis-ulang seluruh koleksi dari salinan memori — sesi lain yang datanya basi
    akan menimpa foto/perubahan yang baru diunggah rekan (akar masalah foto hilang). */
+const APP_VERSION = 4; // dinaikkan tiap rilis yang mengubah cara simpan
+let appStale = false;   // true bila cloud menandai versi minimum lebih baru → tab ini dikunci tulis
 let cloudShadow = null;
 function stableStringify(v){
   if(v===null || typeof v!=="object") return JSON.stringify(v);
@@ -1146,8 +1148,28 @@ async function pushCloudSnapshot(snapshot){
     }
   }
 }
+function markAppStale(){
+  if(appStale) return;
+  appStale = true;
+  cloudReadOk = false; // kunci tulis: tab usang tidak boleh menimpa data versi baru
+  const bar = document.createElement("div");
+  bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:#BE1F2D;color:#fff;padding:10px 16px;text-align:center;font-weight:600;font-size:13.5px;box-shadow:0 2px 10px rgba(0,0,0,.25)";
+  bar.innerHTML = '⚠ Versi aplikasi di tab ini sudah usang — penyimpanan dinonaktifkan agar tidak menimpa data terbaru. <button onclick="location.reload(true)" style="margin-left:10px;padding:5px 14px;border:0;border-radius:8px;background:#fff;color:#BE1F2D;font-weight:700;cursor:pointer">Muat Ulang Sekarang</button>';
+  document.body.appendChild(bar);
+}
+async function checkAppVersion(){
+  if(!firebaseApi || appStale) return;
+  try{
+    const snap = await firebaseApi.getDoc(firebaseApi.rootRef);
+    if(snap.exists()){
+      const min = ((snap.data()||{}).meta||{}).minAppVersion || 0;
+      if(min > APP_VERSION) markAppStale();
+    }
+  }catch(e){}
+}
 function queueCloudSave(){
   if(!firebaseApi) return;
+  if(appStale) return; // tab usang: jangan pernah menulis
   if(!cloudReadOk){
     // PAGAR: sesi ini belum pernah berhasil membaca cloud — jangan pernah menulis,
     // karena snapshot lokal (bisa kosong/basi) akan MENGHAPUS data pusat.
@@ -1160,8 +1182,10 @@ function queueCloudSave(){
   clearTimeout(firebaseSyncTimer);
   firebaseSyncTimer = setTimeout(()=>pushCloudSnapshot(cloneData(db)), 600);
 }
+let bootLocalBackup = null; // salinan localStorage saat boot — sumber pemulihan data yang tertimpa
 async function load(){
   const localData = getLocalSnapshot();
+  bootLocalBackup = localData;
   let cloudData = null;
   if(firebaseApi){
     try{
@@ -1186,6 +1210,50 @@ function save(){
   markDbSaved(firebaseApi ? "firebase+local" : "local");
   if(storageOk){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){ toast("⚠ Gagal menyimpan — ekspor JSON untuk backup"); } }
   queueCloudSave();
+}
+/* ---- PEMULIHAN DARI CADANGAN PERANGKAT ----
+   Setiap perangkat menyimpan salinan penuh di localStorage pada tiap save. Bila data
+   cloud kehilangan foto/temuan (tertimpa sesi berdata basi — bug yang sudah diperbaiki),
+   salinan perangkat pengunggah masih memilikinya. Saat aplikasi dibuka di perangkat itu,
+   yang hilang otomatis dikembalikan:
+   - FOTO: diisikan bila item cloud tidak punya (foto tak pernah bisa dihapus dari UI,
+     jadi cloud tanpa foto + cadangan berfoto = pasti korban timpa)
+   - TEMUAN: item yang ada di cadangan tapi hilang dari cloud dikembalikan, KECUALI
+     yang tercatat dihapus sengaja oleh Admin (db.meta.deletedIds) */
+function restoreFromLocalBackup(){
+  try{
+    if(!firebaseApi || !cloudReadOk) return;           // hanya bila data aktif = data cloud
+    const bak = bootLocalBackup;
+    if(!bak || !Array.isArray(bak.items) || !bak.items.length) return;
+    const deleted = new Set(((db.meta||{}).deletedIds||[]).map(d=>d.id));
+    const byId = {}; db.items.forEach(i=>byId[i.id]=i);
+    let fotoN = 0, itemN = 0;
+    const now = new Date().toISOString();
+    bak.items.forEach(b=>{
+      const cur = byId[b.id];
+      if(cur){
+        let touched = false;
+        if(b.fotoTemuan && !cur.fotoTemuan){ cur.fotoTemuan = b.fotoTemuan; touched = true; }
+        if(b.foto && !cur.foto){ cur.foto = b.foto; touched = true; }
+        if(touched){
+          fotoN++;
+          cur.updated = now;
+          (cur.log = cur.log||[]).push({t:now, msg:"Foto dipulihkan otomatis dari cadangan perangkat"});
+        }
+      } else if(!deleted.has(b.id)){
+        const copy = cloneData(b);
+        (copy.log = copy.log||[]).push({t:now, msg:"Temuan dipulihkan otomatis dari cadangan perangkat (sempat hilang dari cloud)"});
+        db.items.push(copy);
+        itemN++;
+      }
+    });
+    if(fotoN || itemN){
+      save();
+      renderAll();
+      toast("✓ Dipulihkan dari cadangan perangkat ini: "+(itemN?itemN+" temuan":"")+(itemN&&fotoN?", ":"")+(fotoN?fotoN+" item berfoto":""));
+      console.info("[PULIH] foto:", fotoN, "item:", itemN);
+    }
+  }catch(e){ console.warn("Pemulihan cadangan lokal gagal:", e); }
 }
 function shortOutletName(name){
   return name.replace(/^APOTEKKU\s*/,"").trim() || name;
@@ -1282,6 +1350,7 @@ function migrate(){
       console.info("[BSC] migrasi: "+rs.length+" record poin mentah dikonversi ke % (best "+best+")");
     });
   }
+  if(!db.meta.minAppVersion || db.meta.minAppVersion < APP_VERSION) db.meta.minAppVersion = APP_VERSION;
   if(!db.kpi) db.kpi = {targets:{}, entries:[]};
   if(!db.kpi.targets) db.kpi.targets = {};
   if(!db.kpi.entries) db.kpi.entries = [];
@@ -1913,6 +1982,7 @@ $("#btnSave").addEventListener("click", ()=>{
 
 $("#btnDelete").addEventListener("click", ()=>{
   if(!editing || !canDelete()){ toast("⚠ Hanya Admin yang dapat menghapus temuan"); return; }
+  db.meta.deletedIds = (db.meta.deletedIds||[]).concat([{id:editing, t:new Date().toISOString()}]).slice(-500);
   if(!confirm("Hapus temuan ini secara permanen?")) return;
   db.items = db.items.filter(x=>x.id!==editing);
   save(); closeModal(); renderAll(); toast("Temuan dihapus");
@@ -2478,7 +2548,7 @@ async function autoSync(){
     if(okCount) toast("⟳ Sinkron otomatis: "+okCount+" sistem diperbarui");
   } finally { autoSyncRunning = false; }
 }
-setInterval(()=>{ autoSync(); }, AUTO_SYNC_INTERVAL_MS);
+setInterval(()=>{ checkAppVersion(); autoSync(); }, AUTO_SYNC_INTERVAL_MS);
 
 async function syncAll(){
   toast("⟳ Sinkronisasi berjalan…");
@@ -3219,6 +3289,7 @@ function renderAll(){
   await initFirebase();
   await load();
   migrate();
+  restoreFromLocalBackup(); // pulihkan foto/temuan yang tertimpa sesi lain, dari cadangan perangkat ini
   loadSession();
   applyAccess();
   renderAll();
