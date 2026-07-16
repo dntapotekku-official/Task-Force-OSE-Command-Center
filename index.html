@@ -927,6 +927,31 @@ let cloudReadOk = false; // penulisan cloud hanya diizinkan setelah cloud BERHAS
 let firebaseToastShown = false;
 const firebaseState = { status:"idle", message:"Firebase belum diinisialisasi." };
 /* Sub-koleksi Firestore: [nama, ambil array dari db, id dokumen] */
+/* ---- Shadow cloud: potret data cloud saat dimuat ----
+   Dipakai untuk menulis HANYA dokumen yang diubah sesi ini. Tanpa ini, setiap save
+   menulis-ulang seluruh koleksi dari salinan memori — sesi lain yang datanya basi
+   akan menimpa foto/perubahan yang baru diunggah rekan (akar masalah foto hilang). */
+let cloudShadow = null;
+function stableStringify(v){
+  if(v===null || typeof v!=="object") return JSON.stringify(v);
+  if(Array.isArray(v)) return "["+v.map(stableStringify).join(",")+"]";
+  return "{"+Object.keys(v).sort().map(k=>JSON.stringify(k)+":"+stableStringify(v[k])).join(",")+"}";
+}
+function buildShadow(snapshot){
+  const sh = {root:null, cols:{}};
+  if(!snapshot) return sh;
+  sh.root = stableStringify(serializeRootDoc(snapshot));
+  FS_COLLECTIONS.forEach(([name, pick, idOf])=>{
+    const col = {};
+    pick(snapshot).forEach(r=>{
+      const payload = stripUndefined(cloneData({ id:String(idOf(r)), ...r }));
+      col[String(payload.id)] = stableStringify(payload);
+    });
+    sh.cols[name] = col;
+  });
+  return sh;
+}
+
 const FS_COLLECTIONS = [
   ["items",      d=>d.items||[],                    r=>r.id],
   ["audits",     d=>d.audits||[],                   r=>r.k||r.id],
@@ -1058,25 +1083,53 @@ async function loadFirestoreDb(){
 }
 async function syncSubcollection(name, rows){
   const collRef = firebaseApi.collection(firebaseApi.rootRef, name);
-  const currentSnap = await firebaseApi.getDocs(collRef);
-  const existingIds = new Set(currentSnap.docs.map(d=>d.id));
-  const wantedIds = new Set(rows.map(row=>String(row.id)));
-  const writes = rows.map(row=>{
+  const shadowCol = (cloudShadow.cols[name] = cloudShadow.cols[name] || {});
+  const wanted = new Set();
+  const ops = [];
+  rows.forEach(row=>{
     const payload = stripUndefined(cloneData(row));
-    return firebaseApi.setDoc(firebaseApi.doc(collRef, String(payload.id)), payload);
+    const id = String(payload.id);
+    wanted.add(id);
+    const key = stableStringify(payload);
+    if(shadowCol[id] === key) return; // tidak berubah pada sesi ini → JANGAN ditulis ulang
+    ops.push(
+      firebaseApi.setDoc(firebaseApi.doc(collRef, id), payload)
+        .then(()=>{ shadowCol[id] = key; })
+        .catch(err=>({failedId:id, err}))
+    );
   });
-  const deletes = [...existingIds].filter(id=>!wantedIds.has(id))
-    .map(id=>firebaseApi.deleteDoc(firebaseApi.doc(collRef, id)));
-  await Promise.all(writes.concat(deletes));
+  // hapus HANYA dokumen yang sesi ini kenal (ada di shadow) dan memang dihapus lokal.
+  // Dokumen baru buatan sesi lain (tak dikenal sesi ini) TIDAK pernah ikut terhapus.
+  Object.keys(shadowCol).forEach(id=>{
+    if(wanted.has(id)) return;
+    ops.push(
+      firebaseApi.deleteDoc(firebaseApi.doc(collRef, id))
+        .then(()=>{ delete shadowCol[id]; })
+        .catch(err=>({failedId:id, err}))
+    );
+  });
+  const results = await Promise.all(ops);
+  return results.filter(r=>r && r.failedId).map(r=>({col:name, id:r.failedId, err:r.err}));
 }
 async function pushCloudSnapshot(snapshot){
   if(!firebaseApi) return;
+  if(!cloudShadow) cloudShadow = {root:null, cols:{}};
   try{
-    await firebaseApi.setDoc(firebaseApi.rootRef, serializeRootDoc(snapshot));
-    await Promise.all(FS_COLLECTIONS.map(([name, pick, idOf])=>{
+    const rootPayload = serializeRootDoc(snapshot);
+    const rootKey = stableStringify(rootPayload);
+    if(cloudShadow.root !== rootKey){
+      await firebaseApi.setDoc(firebaseApi.rootRef, rootPayload);
+      cloudShadow.root = rootKey;
+    }
+    const failLists = await Promise.all(FS_COLLECTIONS.map(([name, pick, idOf])=>{
       const rows = pick(snapshot).map(r=>({ id:String(idOf(r)), ...r }));
       return syncSubcollection(name, rows);
     }));
+    const failed = failLists.flat();
+    if(failed.length){
+      console.warn("Dokumen gagal tersimpan ke cloud:", failed);
+      toast("⚠ "+failed.length+" data gagal tersimpan ke cloud ("+failed.slice(0,3).map(f=>f.id).join(", ")+(failed.length>3?", …":"")+"). Kemungkinan foto terlalu besar — coba unggah ulang dengan foto lebih kecil.");
+    }
     if(firebaseState.status!=="ready"){
       firebaseState.status = "ready";
       firebaseState.message = "Sinkronisasi cloud kembali aktif.";
@@ -1114,6 +1167,7 @@ async function load(){
     try{
       cloudData = await loadFirestoreDb();
       cloudReadOk = true; // pembacaan berhasil (termasuk bila cloud memang kosong)
+      cloudShadow = buildShadow(cloudData); // potret isi cloud utk diff-save
     }
     catch(e){
       cloudReadOk = false;
@@ -1761,12 +1815,19 @@ let fotoTemuanData = null;  // foto kondisi temuan
 function compressImage(file, cb){
   const img = new Image();
   const rd = new FileReader();
+  const LEVELS = [[900,.78],[720,.6],[560,.5],[440,.42]]; // turunkan bertahap bila masih besar
+  const CAP = 550*1024; // batas aman per foto (dokumen Firestore maks 1MB utk 2 foto + teks)
   rd.onload = ()=>{ img.onload = ()=>{
-      const MAX=900; let w=img.width,h=img.height;
-      if(w>MAX||h>MAX){ const r=Math.min(MAX/w,MAX/h); w=Math.round(w*r); h=Math.round(h*r); }
-      const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
-      cv.getContext("2d").drawImage(img,0,0,w,h);
-      cb(cv.toDataURL("image/jpeg",.78));
+      let out = null;
+      for(const [MAX,q] of LEVELS){
+        let w=img.width,h=img.height;
+        if(w>MAX||h>MAX){ const r=Math.min(MAX/w,MAX/h); w=Math.round(w*r); h=Math.round(h*r); }
+        const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+        cv.getContext("2d").drawImage(img,0,0,w,h);
+        out = cv.toDataURL("image/jpeg",q);
+        if(out.length <= CAP) break;
+      }
+      cb(out);
     }; img.src = rd.result; };
   rd.readAsDataURL(file);
 }
@@ -2313,7 +2374,7 @@ function upsertNormalized(records, sysStoreId){
   }
   return n;
 }
-async function syncBsc(cfg){
+async function syncBsc(cfg, quiet){
   const period = bscPeriod();
   const urlHealth = joinUrl(cfg.baseUrl, (cfg.endpoints&&cfg.endpoints.health)||"/health");
   const urlSummary = joinUrl(cfg.baseUrl, (cfg.endpoints&&cfg.endpoints.summary)||"/bsc/summary")+"?period="+period;
@@ -2362,17 +2423,18 @@ async function syncBsc(cfg){
     const failedUrl = e.url || urlSummary;
     const which = String(failedUrl).includes("/health") ? "health" : (String(failedUrl).includes("summary") ? "summary" : "priorities");
     cfg.lastError = "["+which+"] "+humanConnError(cfg, e, failedUrl);
-    if((e.status===401||e.status===403) && !sessionApiKeys[cfg.id] && typeof prompt==="function"){
-      if(askSessionKey(cfg)) return syncBsc(cfg); // ulangi sekali dengan key sesi
+    if(!quiet && (e.status===401||e.status===403) && !sessionApiKeys[cfg.id] && typeof prompt==="function"){
+      if(askSessionKey(cfg)) return syncBsc(cfg); // ulangi sekali dengan key sesi (hanya sinkron manual)
     }
     return {ok:false, why:cfg.lastError, urlHealth, urlSummary};
   }
 }
-async function syncConnector(id){
+async function syncConnector(id, opts){
+  const quiet = !!(opts && opts.quiet);
   const c = connCfg(id);
   if(c.internal){ refreshInternalData(); return {ok:true}; }
   if(!c.baseUrl){ c.status="not_integrated"; return {ok:false, why:"Belum dikonfigurasi"}; }
-  if(c.adapter==="bsc_v2") return syncBsc(c);
+  if(c.adapter==="bsc_v2") return syncBsc(c, quiet);
   // ---- konektor generik: endpoint findings per-sistem ----
   const url = joinUrl(c.baseUrl, (c.endpoints&&c.endpoints.findings)||"/api/review-rutin/findings")+"?system="+id;
   try{
@@ -2386,6 +2448,38 @@ async function syncConnector(id){
     return {ok:false, why:c.lastError};
   }
 }
+/* ---- SINKRON OTOMATIS ----
+   Berjalan tanpa klik: saat halaman dibuka (bila data basi) dan berkala selama tab terbuka.
+   Aturan aman: hanya untuk akun non-outlet yang sudah login, hanya bila cloud terbaca
+   (pagar anti-timpa tetap berlaku), dan tidak pernah memunculkan prompt API key. */
+const AUTO_SYNC_STALE_MIN = 30;   // sinkron bila data lebih tua dari 30 menit
+const AUTO_SYNC_INTERVAL_MS = 10*60*1000; // cek ulang tiap 10 menit
+let autoSyncRunning = false;
+function autoSyncDue(){
+  return db.integrations.filter(c=>!c.internal && c.baseUrl &&
+    (!c.lastSync || (Date.now()-new Date(c.lastSync))/60000 > AUTO_SYNC_STALE_MIN));
+}
+async function autoSync(){
+  if(autoSyncRunning) return;
+  if(!currentUser || isOutlet()) return;      // hanya admin/SSC
+  if(firebaseApi && !cloudReadOk) return;     // cloud belum terbaca → jangan menulis
+  const due = autoSyncDue();
+  refreshInternalData();
+  if(!due.length) return;
+  autoSyncRunning = true;
+  try{
+    let okCount = 0;
+    for(const c of due){ const r = await syncConnector(c.id, {quiet:true}); if(r && r.ok) okCount++; }
+    db.meta.lastSyncAll = new Date().toISOString();
+    save();
+    if(document.querySelector("#view-review.active")) renderAktivitas();
+    if(document.querySelector("#view-dashboard.active")) renderDashboard();
+    renderReport();
+    if(okCount) toast("⟳ Sinkron otomatis: "+okCount+" sistem diperbarui");
+  } finally { autoSyncRunning = false; }
+}
+setInterval(()=>{ autoSync(); }, AUTO_SYNC_INTERVAL_MS);
+
 async function syncAll(){
   toast("⟳ Sinkronisasi berjalan…");
   for(const c of db.integrations){ await syncConnector(c.id); }
@@ -2928,6 +3022,7 @@ function doLogin(){
   $("#loginBack").classList.remove("open");
   applyAccess(); renderAll(); switchView(firstView());
   toast("Selamat bekerja, "+u.name+" 👋");
+  setTimeout(autoSync, 800);
 }
 $("#btnLogin").addEventListener("click", doLogin);
 $("#loginPin").addEventListener("keydown", e=>{ if(e.key==="Enter") doLogin(); });
@@ -3130,6 +3225,7 @@ function renderAll(){
   enhanceAllSelects();
   renderStorageNote();
   if(!currentUser) showLogin();
+  else setTimeout(autoSync, 1200); // sinkron otomatis setelah halaman siap
 })();
 </script>
 </body>
