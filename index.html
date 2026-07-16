@@ -296,6 +296,17 @@ tbody tr.overdue-row:hover{background:#fae7e3}
 .dash-rv{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:15px 18px}
 .dash-rv .row{display:flex;flex-wrap:wrap;gap:10px 22px;font-size:13px;align-items:center}
 
+/* ======= Penampil Foto ======= */
+.pv-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:700px){.pv-grid{grid-template-columns:1fr}}
+.pv-panel{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--paper)}
+.pv-panel h5{margin:0;padding:9px 13px;font-family:var(--font-display);font-size:12.5px;letter-spacing:.3px;background:var(--brand-tint);color:var(--brand-deep);border-bottom:1px solid var(--line)}
+.pv-body{display:flex;align-items:center;justify-content:center;min-height:180px;padding:10px}
+.pv-body img{max-width:100%;max-height:52vh;border-radius:8px;cursor:zoom-in;box-shadow:0 4px 18px rgba(110,15,24,.12)}
+.pv-body img.zoom{max-height:none;cursor:zoom-out}
+.pv-none{color:var(--ink-faint);font-size:12.5px;font-style:italic;text-align:center;padding:30px 10px}
+.pv-caption{font-size:12px;color:var(--ink-soft);margin-top:10px}
+
 /* ======= Searchable Select ======= */
 .ss{position:relative;display:inline-block;min-width:190px}
 .ss-btn{width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 30px 9px 13px;font-size:13.5px;color:var(--ink);position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -683,6 +694,20 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
         <button class="btn btn-ghost" id="btnCancel">Batal</button>
         <button class="btn btn-primary" id="btnSave">Simpan Perubahan</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Penampil Foto -->
+<div class="modal-back" id="photoViewBack">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:860px">
+    <div class="modal-head"><h3 id="pvTitle">Foto Temuan</h3><button class="x-btn" id="pvClose" aria-label="Tutup">×</button></div>
+    <div class="modal-body" style="display:block">
+      <div class="pv-grid">
+        <div class="pv-panel"><h5>📷 Foto Temuan</h5><div class="pv-body" id="pvTemuan"></div></div>
+        <div class="pv-panel"><h5>🖼️ Foto Bukti Perbaikan</h5><div class="pv-body" id="pvBukti"></div></div>
+      </div>
+      <div class="pv-caption" id="pvCaption"></div>
     </div>
   </div>
 </div>
@@ -1476,7 +1501,7 @@ function renderTemuanTable(list){
     return `<tr data-id="${it.id}" class="${od?'overdue-row':''}">
       <td class="muted">${idx+1}</td>
       <td style="white-space:nowrap">${esc(it.outlet)}</td>
-      <td class="temuan-cell">${esc(it.temuan)}${it.fotoTemuan?' <span title="Ada foto temuan">📷</span>':""}${it.foto?' <span title="Ada foto bukti perbaikan">🖼️</span>':""}</td>
+      <td class="temuan-cell">${esc(it.temuan)}${(it.fotoTemuan||it.foto)?` <button class="mini-act btn-foto" data-id="${it.id}" title="Lihat foto temuan & bukti perbaikan">📷 Foto</button>`:""}</td>
       <td><span class="chip ${DIVISI[it.divisi].chip}">${it.divisi==="NONE"?"⚠ Belum ada":(it.divisi==="QIC"?"QI & C":esc(it.divisi))}</span></td>
       <td class="temuan-cell" style="max-width:250px">${it.ca?esc(it.ca):'<span class="muted">— belum diisi</span>'}</td>
       <td>${it.pic?esc(it.pic):'<span class="muted">—</span>'}</td>
@@ -1484,6 +1509,7 @@ function renderTemuanTable(list){
       <td>${st}</td></tr>`;
   }).join("") : `<tr><td colspan="8" class="empty">Tidak ada temuan yang cocok dengan filter.</td></tr>`;
   $$("#temuanBody tr[data-id]").forEach(bindRow);
+  $$(".btn-foto").forEach(b=>b.addEventListener("click", e=>{ e.stopPropagation(); openPhotoView(b.dataset.id); }));
 }
 
 /* ================= RENDER: PRIORITAS ================= */
@@ -2615,6 +2641,26 @@ $("#btnCooCopy").addEventListener("click", async()=>{
   try{ await navigator.clipboard.writeText(txt); toast("✓ Morning Brief COO disalin"); }
   catch(e){ const ta=document.createElement("textarea"); ta.value=txt; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); toast("✓ Morning Brief COO disalin"); }
 });
+
+/* ---- penampil foto temuan & bukti ---- */
+function openPhotoView(id){
+  const it = db.items.find(x=>x.id===id); if(!it) return;
+  $("#pvTitle").textContent = "Foto — "+shortOutletName(it.outlet);
+  const put = (elId, src, emptyMsg)=>{
+    const el = $("#"+elId);
+    if(src){
+      el.innerHTML = `<img src="${src}" alt="">`;
+      const img = el.querySelector("img");
+      img.addEventListener("click", ()=>img.classList.toggle("zoom"));
+    } else el.innerHTML = `<div class="pv-none">${emptyMsg}</div>`;
+  };
+  put("pvTemuan", it.fotoTemuan, "Belum ada foto temuan.<br>Unggah melalui form edit temuan.");
+  put("pvBukti", it.foto, "Belum ada foto bukti perbaikan."+(it.bukti?"<br>Keterangan bukti: "+esc(it.bukti):"<br>Unggah saat perbaikan selesai."));
+  $("#pvCaption").textContent = it.temuan;
+  $("#photoViewBack").classList.add("open");
+}
+$("#pvClose").addEventListener("click", ()=>$("#photoViewBack").classList.remove("open"));
+$("#photoViewBack").addEventListener("click", e=>{ if(e.target===e.currentTarget) $("#photoViewBack").classList.remove("open"); });
 
 /* ---- modal konektor ---- */
 let connEditing=null;
