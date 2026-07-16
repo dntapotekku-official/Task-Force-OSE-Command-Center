@@ -2286,6 +2286,19 @@ function bscNormalize(row, period, bestPoints){
     created_at: new Date().toISOString()
   };
 }
+/* Rata-rata Konversi BSC = mean skor konversi terkini per outlet (no_data diabaikan) — angka yang sama dengan kartu Rapot */
+function bscAvgConversion(){
+  const byOutlet = {};
+  db.reviewData.filter(r=>r.source_system==="bsc_v2" && r.outlet_id!=="(agregat)").forEach(r=>{
+    const cur = byOutlet[r.outlet_id];
+    if(!cur || (cur.review_date||"") < (r.review_date||"")) byOutlet[r.outlet_id] = r;
+  });
+  const scores = Object.values(byOutlet)
+    .filter(r=>r.score!==null && r.score!==undefined && r.status!=="no_data")
+    .map(r=>Number(r.score)).filter(v=>!isNaN(v));
+  if(!scores.length) return null;
+  return Math.round(scores.reduce((a,b)=>a+b,0)/scores.length*10)/10;
+}
 function upsertNormalized(records, sysStoreId){
   let n = 0;
   records.forEach(r=>{
@@ -2332,10 +2345,18 @@ async function syncBsc(cfg){
       db.meta.bscPriorities = { period, fetchedAt:new Date().toISOString(),
         outlets: items.map(x=>String(x.outlet_name||x.outlet_id||"").trim()).filter(Boolean) };
     }catch(e2){ console.warn("[BSC] priorities gagal:", humanConnError(cfg,e2,urlPriorities)); }
-    // 4) status
+    // 4) rata-rata konversi → otomatis tercatat sebagai nilai KPI "BSC Outlet (Konversi)"
+    const avgConv = bscAvgConversion();
+    if(avgConv!==null){
+      const today = todayStr();
+      db.kpi.entries = db.kpi.entries.filter(e=>!(e.id==="bsc" && e.date===today && e.auto)); // ganti entri otomatis hari yang sama
+      db.kpi.entries.push({k:"kbsc-"+Date.now(), id:"bsc", date:today, value:avgConv,
+        note:"Otomatis dari Sistem BSC — rata-rata konversi dari outlet terbaik", t:new Date().toISOString(), auto:true});
+    }
+    // 5) status
     cfg.status = "connected"; cfg.lastSync = new Date().toISOString();
     cfg.lastError = healthNote; // tampil sebagai catatan kecil di tabel bila ada
-    return {ok:true, n:normalized.length, sample:normalized[0]||null, urlHealth, urlSummary, healthNote};
+    return {ok:true, n:normalized.length, sample:normalized[0]||null, avgConv, urlHealth, urlSummary, healthNote};
   }catch(e){
     cfg.status = "failed";
     const failedUrl = e.url || urlSummary;
@@ -2515,7 +2536,10 @@ function renderAktivitas(){
   $("#cntAct").textContent = nFail + kritis.length;
   const noData = !hasFieldData(recs);
   const card=(l,v,sub,c)=>`<div class="kpi" style="--kpi-c:${c}"><div class="lbl">${l}</div><div class="val">${v}</div><div class="sub">${sub}</div></div>`;
+  const avgConv = bscAvgConversion();
   $("#rvExec").innerHTML =
+    card("Rata-rata Konversi BSC", avgConv!==null? fmtVal(avgConv,"%") : '<span class="no-data" style="font-size:15px">—</span>',
+      avgConv!==null? "dari outlet terbaik · target ≥"+fmtVal(db.kpi.targets.bsc,"%") : "sinkronkan Sistem BSC", "var(--brand)")+
     card("Outlet Termonitor", outletsData.size||'<span class="no-data" style="font-size:15px">—</span>', outletsData.size? "dari "+OUTLETS.length+" outlet":"data belum terhubung", "var(--blue)")+
     card("Temuan Baru", noData?'<span class="no-data" style="font-size:15px">—</span>':findings.length, noData?"data belum terhubung":"periode terpilih", "var(--amber)")+
     card("Temuan Kritis", noData?'<span class="no-data" style="font-size:15px">—</span>':kritis.length, noData?"data belum terhubung":"perlu tindakan segera", "var(--red)")+
