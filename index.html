@@ -1432,7 +1432,7 @@ function renderDashboard(){
     const nNone=effs.filter(x=>x.eff==="not_integrated").length;
     const d7=new Date(); d7.setDate(d7.getDate()-6);
     const recs=db.reviewData.filter(r=>r.review_date>=periodKey("harian",d7));
-    const outletsData=new Set(recs.filter(r=>r.outlet_id!=="(agregat)").map(r=>r.outlet_id));
+    const outletsData=new Set(monitoredRecs(recs).map(r=>r.outlet_id));
     const kritis=recs.filter(r=>r.status==="kritis").length;
     const teamChip = k=>{
       const tr=fieldRecs(recs).filter(r=>r.team===k);
@@ -1645,7 +1645,7 @@ function renderReport(){
       const nFail=effs.filter(x=>x.eff==="failed").length;
       const nNone=effs.filter(x=>x.eff==="not_integrated").length;
       const recs=db.reviewData.filter(r=>r.review_date>=periodKey("harian",(()=>{const d=new Date();d.setDate(d.getDate()-6);return d;})()));
-      const outletsData=new Set(recs.filter(r=>r.outlet_id!=="(agregat)").map(r=>r.outlet_id));
+      const outletsData=new Set(monitoredRecs(recs).map(r=>r.outlet_id));
       const kritis=recs.filter(r=>r.status==="kritis");
       let masalah="";
       if(recs.length){
@@ -1718,7 +1718,7 @@ function buildBrief(){
     const recs=db.reviewData.filter(r=>r.review_date>=periodKey("harian",d7));
     if(hasFieldData(recs)){
       const kritis=recs.filter(r=>r.status==="kritis").length;
-      L.push("Data 7 hari: "+new Set(fieldRecs(recs).map(r=>r.outlet_id)).size+" outlet termonitor, "+kritis+" temuan kritis");
+      L.push("Data 7 hari: "+new Set(monitoredRecs(recs).map(r=>r.outlet_id)).size+" outlet termonitor, "+kritis+" temuan kritis");
     } else L.push("⚠ Data review divisi belum terhubung — belum mewakili kondisi lapangan");
   }
   L.push("");
@@ -2135,6 +2135,8 @@ function rvFiltered(){
   });
 }
 function fieldRecs(recs){ return recs.filter(r=>r.outlet_id!=="(agregat)"); }
+function monitoredRecs(recs){ return recs.filter(r=>r.outlet_id!=="(agregat)" && r.status!=="no_data"); }
+function realFindings(recs){ return recs.filter(r=>r.finding && r.status!=="no_data"); }
 function hasFieldData(recs){ return fieldRecs(recs).length>0; }
 function normStatus(score,target,dir){
   if(score===null||score===undefined||isNaN(score)) return null;
@@ -2483,7 +2485,7 @@ function renderAktivitas(){
   const nConn = effs.filter(x=>x.eff==="connected"||x.eff==="delayed").length;
   const nFail = effs.filter(x=>x.eff==="failed").length;
   const nNone = effs.filter(x=>x.eff==="not_integrated").length;
-  const outletsData = new Set(recs.filter(r=>r.outlet_id!=="(agregat)").map(r=>r.outlet_id));
+  const outletsData = new Set(monitoredRecs(recs).map(r=>r.outlet_id)); // outlet DENGAN DATA (no_data tak dihitung, selaras Rapot)
   const now=new Date();
 
   // 1. header
@@ -2505,7 +2507,7 @@ function renderAktivitas(){
   }
 
   // 2. executive summary
-  const findings = recs.filter(r=>r.finding);
+  const findings = realFindings(recs); // catatan no_data bukan temuan lapangan
   const kritis = recs.filter(r=>r.status==="kritis");
   const ovdAll = db.items.filter(isOverdue).length;
   const prios = outletPriorities(recs);
@@ -2668,7 +2670,7 @@ function buildCooBrief(recs, prios, m){
   const noTeamN = db.items.filter(i=>i.divisi==="NONE").length;
   return `
     <h4>Kondisi Umum</h4>
-    <p>Status task force: <b>${lvl.emoji} ${lvl.label}</b>. Sistem terhubung <b>${m.nConn}/${db.integrations.length}</b>${m.nFail?`, <b style="color:var(--red)">${m.nFail} gagal sinkron</b>`:""}${m.nNone?`, ${m.nNone} belum terintegrasi`:""}. ${noData?'<b>Data review divisi belum mengalir</b> — angka pada halaman ini belum mewakili kondisi lapangan.':`Terpantau <b>${new Set(fieldRecs(recs).map(r=>r.outlet_id)).size} outlet</b> dengan <b>${m.findings.length} temuan</b> (${m.kritis.length} kritis) pada periode ini.`}</p>
+    <p>Status task force: <b>${lvl.emoji} ${lvl.label}</b>. Sistem terhubung <b>${m.nConn}/${db.integrations.length}</b>${m.nFail?`, <b style="color:var(--red)">${m.nFail} gagal sinkron</b>`:""}${m.nNone?`, ${m.nNone} belum terintegrasi`:""}. ${noData?'<b>Data review divisi belum mengalir</b> — angka pada halaman ini belum mewakili kondisi lapangan.':`Terpantau <b>${new Set(monitoredRecs(recs).map(r=>r.outlet_id)).size} outlet</b> dengan <b>${m.findings.length} temuan</b> (${m.kritis.length} kritis) pada periode ini.`}</p>
     <h4>Capaian 5 KPI Utama</h4><ul>${kpiLis}</ul>
     <h4>Masalah Dominan</h4><p>${dominan}</p>
     <h4>Outlet Prioritas</h4>
