@@ -1130,7 +1130,10 @@ const isOutlet = ()=>currentUser && currentUser.role==="outlet";
 const canVerify = ()=>isAdmin() || (isSSC() && currentUser.divisi==="QIC");
 const canDelete = ()=>isAdmin();
 const canManageData = ()=>isAdmin();
-function visibleItems(){ return isOutlet() ? db.items.filter(i=>i.outlet===currentUser.outlet) : db.items; }
+function visibleItems(){
+  const items = db && Array.isArray(db.items) ? db.items : [];
+  return isOutlet() ? items.filter(i=>i.outlet===currentUser.outlet) : items;
+}
 function roleLabel(u){
   if(u.role==="admin") return "Admin";
   if(u.role==="ssc") return "SSC · "+(u.divisi==="QIC"?"QI & C":u.divisi);

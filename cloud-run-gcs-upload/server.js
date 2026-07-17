@@ -81,18 +81,14 @@ app.post("/sign-upload", async (req, res, next) => {
       version: "v4",
       action: "write",
       expires: Date.now() + 15 * 60 * 1000,
-      contentType,
-      extensionHeaders: {
-        "x-goog-meta-firebase-uid": user.uid
-      }
+      contentType
     });
 
     res.json({
       uploadUrl,
       method: "PUT",
       headers: {
-        "Content-Type": contentType,
-        "x-goog-meta-firebase-uid": user.uid
+        "Content-Type": contentType
       },
       path,
       publicUrl: publicObjectUrl(path),

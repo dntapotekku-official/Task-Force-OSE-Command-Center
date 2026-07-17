@@ -9,8 +9,7 @@
       "OPTIONS"
     ],
     "responseHeader": [
-      "Content-Type",
-      "x-goog-meta-firebase-uid"
+      "Content-Type"
     ],
     "maxAgeSeconds": 3600
   }
