@@ -51,7 +51,7 @@ Untuk upload signed URL dari browser, bucket perlu CORS minimal:
   {
     "origin": ["https://task-force-ose-command-center.apotekku.com"],
     "method": ["GET", "PUT", "OPTIONS"],
-    "responseHeader": ["Content-Type", "x-goog-meta-firebase-uid"],
+    "responseHeader": ["Content-Type"],
     "maxAgeSeconds": 3600
   }
 ]

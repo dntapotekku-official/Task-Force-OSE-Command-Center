@@ -74,7 +74,7 @@ app.get("/healthz", (req, res) => {
 
 app.post("/sign-upload", async (req, res, next) => {
   try {
-    const user = await verifyFirebaseUser(req);
+    await verifyFirebaseUser(req);
     const { path, contentType } = assertUploadRequest(req.body || {});
     const file = bucket.file(path);
     const [uploadUrl] = await file.getSignedUrl({
