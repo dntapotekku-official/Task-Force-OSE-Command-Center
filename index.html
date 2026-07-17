@@ -821,6 +821,7 @@ const firebaseConfig = {
   appId: "1:380412737055:web:761de8e4ac6738b377c72a",
   measurementId: "G-DGC8DFSKMC"
 };
+const GCS_UPLOAD_SIGN_URL_ENDPOINT = "https://task-force-gcs-upload-signer-694371412078.asia-southeast2.run.app/sign-upload";
 let firebaseApi = null;
 let firebaseSyncTimer = null;
 let firebaseToastShown = false;
@@ -911,20 +912,17 @@ async function initFirebase(){
       { initializeApp },
       { getAnalytics, isSupported },
       { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc },
-      { getAuth, signInAnonymously },
-      { getStorage, ref: storageRef, uploadBytes, getDownloadURL }
+      { getAuth, signInAnonymously }
     ] = await Promise.all([
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js"),
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js"),
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js"),
-      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js"),
-      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js")
+      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js")
     ]);
     const app = initializeApp(firebaseConfig);
     isSupported().then(supported=>{ if(supported) getAnalytics(app); }).catch(()=>{});
     const store = getFirestore(app);
     const auth = getAuth(app);
-    const storage = getStorage(app, `gs://${firebaseConfig.storageBucket}`);
     try{
       await signInAnonymously(auth);
       firebaseAuthReady = true;
@@ -938,16 +936,13 @@ async function initFirebase(){
       doc,
       getDoc,
       getDocs,
-      getDownloadURL,
-      storageRef,
       setDoc,
-      uploadBytes,
-      storage,
+      auth,
       rootRef: doc(store, FIREBASE_FS_ROOT.collection, FIREBASE_FS_ROOT.doc)
     };
     firebaseState.status = "ready";
     firebaseState.message = firebaseAuthReady
-      ? "Data tersinkron ke Cloud Firestore. Foto temuan/bukti tersimpan di Google Storage."
+      ? "Data tersinkron ke Cloud Firestore. Foto temuan/bukti diunggah ke Google Cloud Storage."
       : "Data tersinkron ke Cloud Firestore, tetapi upload foto perlu Firebase Anonymous Auth aktif.";
   }catch(e){
     firebaseApi = null;
@@ -1553,7 +1548,8 @@ function dataUrlToBlob(dataUrl){
 async function uploadCapaPhoto(dataUrl, kind, itemId, outlet){
   if(!isDataImage(dataUrl)) return {url:dataUrl, path:null};
   if(location.protocol === "file:") throw new Error("Buka aplikasi melalui http://localhost atau domain HTTPS, bukan file langsung.");
-  if(!firebaseApi || !firebaseAuthReady) throw new Error("Firebase Storage belum siap. Pastikan Anonymous Auth aktif di Firebase Console.");
+  if(!firebaseApi || !firebaseAuthReady || !firebaseApi.auth.currentUser) throw new Error("Firebase Auth belum siap. Pastikan Anonymous Auth aktif di Firebase Console.");
+  if(!GCS_UPLOAD_SIGN_URL_ENDPOINT) throw new Error("Endpoint upload Google Cloud Storage belum diisi.");
   const blob = dataUrlToBlob(dataUrl);
   const d = new Date();
   const year = String(d.getFullYear());
@@ -1564,13 +1560,37 @@ async function uploadCapaPhoto(dataUrl, kind, itemId, outlet){
   const ext = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg";
   const fileName = `${safeKind}-${safeOutlet}-${itemId}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
   const path = `uploads/${year}/${month}/${day}/${fileName}`;
-  const ref = firebaseApi.storageRef(firebaseApi.storage, path);
-  await firebaseApi.uploadBytes(ref, blob, {
-    contentType: blob.type || "image/jpeg",
-    customMetadata: { itemId:String(itemId), outlet:String(outlet || ""), kind:String(kind || "") }
+  const idToken = await firebaseApi.auth.currentUser.getIdToken();
+  const signRes = await fetch(GCS_UPLOAD_SIGN_URL_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${idToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      path,
+      contentType: blob.type || "image/jpeg",
+      size: blob.size,
+      metadata: { itemId:String(itemId), outlet:String(outlet || ""), kind:String(kind || "") }
+    })
   });
-  const url = await firebaseApi.getDownloadURL(ref);
-  return {url, path};
+  if(!signRes.ok){
+    let message = "Gagal meminta izin upload Google Cloud Storage.";
+    try{
+      const err = await signRes.json();
+      if(err && err.error) message = err.error;
+    }catch(e){}
+    throw new Error(message);
+  }
+  const signed = await signRes.json();
+  const uploadHeaders = signed.headers || {"Content-Type": blob.type || "image/jpeg"};
+  const uploadRes = await fetch(signed.uploadUrl, {
+    method: signed.method || "PUT",
+    headers: uploadHeaders,
+    body: blob
+  });
+  if(!uploadRes.ok) throw new Error("Upload ke Google Cloud Storage gagal ("+uploadRes.status+").");
+  return {url:signed.publicUrl, path:signed.path || path};
 }
 async function resolveCapaPhotos(vals, itemId, previous){
   const out = {...vals};

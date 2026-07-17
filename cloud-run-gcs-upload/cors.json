@@ -1,0 +1,17 @@
+[
+  {
+    "origin": [
+      "https://task-force-ose-command-center.apotekku.com"
+    ],
+    "method": [
+      "GET",
+      "PUT",
+      "OPTIONS"
+    ],
+    "responseHeader": [
+      "Content-Type",
+      "x-goog-meta-firebase-uid"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]
