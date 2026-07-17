@@ -1,0 +1,18 @@
+rules_version = '2';
+// Storage Rules — Task Force OSE (pasang: Firebase Console → Storage → Rules → Publish)
+// Baca publik (URL foto bisa dibuka), tulis hanya gambar ≤5MB ke folder uploads/,
+// hapus diizinkan (untuk fitur ganti/hapus foto). Tanpa kredensial di aplikasi.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /uploads/{year}/{month}/{day}/{file} {
+      allow read: if true;
+      allow write: if request.resource != null
+                   && request.resource.size <= 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow delete: if true;
+    }
+    match /{allPaths=**} {
+      allow read, write: if false; // di luar uploads/: tertutup
+    }
+  }
+}

@@ -612,6 +612,18 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
       <button class="btn btn-primary" id="btnExportJson">Unduh JSON</button>
     </div>
     <div class="data-card">
+      <h4>☁️ Penyimpanan Foto — Google Cloud Storage</h4>
+      <p style="font-size:12px;color:var(--ink-soft)">Bila aktif, foto temuan & bukti diunggah ke bucket Google Cloud Storage (pola <code>uploads/TAHUN/BULAN/TANGGAL/uuid.jpg</code>, maks 5 MB, jpg/png/webp) dan tersimpan sebagai URL — dokumen data jadi ringan. Tanpa kredensial di browser; akses diatur lewat Storage Rules di Firebase Console. Foto lama (base64) tetap tampil normal.</p>
+      <div id="gcsStatus" style="font-size:12.5px;margin:6px 0"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="text" id="gcsBucket" placeholder="Nama bucket (kosongkan = bucket bawaan project)" style="flex:1;min-width:220px">
+        <button class="btn btn-ghost" id="btnGcsTest">🧪 Uji & Aktifkan</button>
+        <button class="btn btn-ghost" id="btnGcsOff" style="display:none">Nonaktifkan</button>
+      </div>
+      <p style="font-size:11.5px;color:var(--ink-faint);margin-top:6px">Prasyarat sekali saja di Firebase Console: aktifkan <b>Storage</b>, tautkan bucket (bawaan atau <code>task-force</code>), lalu pasang Storage Rules dari file <code>storage.rules</code> di repo.</p>
+    </div>
+
+    <div class="card" style="margin-top:14px">
       <h4>📥 Impor Data (JSON)</h4>
       <p style="font-size:12px;color:var(--ink-soft)">Mendukung 2 format: <b>pembaruan temuan</b> (merge — aman, tidak menghapus/menurunkan status) dan backup penuh (mengganti seluruh data).</p>
       <p>Muat file JSON hasil ekspor. Data saat ini akan diganti.</p>
@@ -922,6 +934,7 @@ const firebaseConfig = {
   measurementId: "G-DGC8DFSKMC"
 };
 let firebaseApi = null;
+let storageApi = null; // SDK Firebase Storage (Google Cloud Storage)
 let firebaseSyncTimer = null;
 let cloudReadOk = false; // penulisan cloud hanya diizinkan setelah cloud BERHASIL dibaca sesi ini
 let firebaseToastShown = false;
@@ -1040,17 +1053,21 @@ async function initFirebase(){
     const [
       { initializeApp },
       { getAnalytics, isSupported },
-      { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc }
+      { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc },
+      { getStorage, ref: sRef, uploadString, getDownloadURL, deleteObject }
     ] = await Promise.all([
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js"),
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js"),
-      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js")
+      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js"),
+      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js")
     ]);
     const app = initializeApp(firebaseConfig);
     isSupported().then(supported=>{ if(supported) getAnalytics(app); }).catch(()=>{});
     const store = getFirestore(app);
     firebaseApi = { collection, deleteDoc, doc, getDoc, getDocs, setDoc,
       rootRef: doc(store, FIREBASE_FS_ROOT.collection, FIREBASE_FS_ROOT.doc) };
+    // Google Cloud Storage via Firebase Storage — tanpa kredensial di browser
+    storageApi = { getStorage, sRef, uploadString, getDownloadURL, deleteObject, app };
     firebaseState.status = "ready";
     firebaseState.message = "Data disinkronkan antar perangkat melalui Cloud Firestore.";
   }catch(e){
@@ -1881,6 +1898,56 @@ function buildBrief(){
 let editing = null; // id or null (add mode)
 let fotoData = null;        // foto bukti perbaikan
 let fotoTemuanData = null;  // foto kondisi temuan
+/* ---- PENYIMPANAN FOTO: Google Cloud Storage (Firebase Storage) ----
+   Aktif bila Admin mengaktifkannya di menu Data. Foto diunggah ke bucket dengan pola
+   uploads/YYYY/MM/DD/uuid.ext dan disimpan sebagai URL (bukan base64) sehingga dokumen
+   Firestore ringan. Tanpa kredensial apa pun di browser — akses diatur Storage Rules. */
+function fotoStorageCfg(){ return (db.meta && db.meta.fotoStorage) || {enabled:false, bucket:""}; }
+function gcsReady(){ return !!(storageApi && fotoStorageCfg().enabled); }
+function gcsBucketRef(){
+  const cfg = fotoStorageCfg();
+  return cfg.bucket ? storageApi.getStorage(storageApi.app, "gs://"+cfg.bucket) : storageApi.getStorage(storageApi.app);
+}
+function gcsUuid(){
+  return (crypto.randomUUID ? crypto.randomUUID() :
+    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&0x3|0x8)).toString(16);}));
+}
+async function gcsUploadDataUrl(dataUrl){
+  if(!gcsReady()) throw new Error("STORAGE_OFF");
+  const m = /^data:image\/(jpeg|jpg|png|webp);base64,/.exec(dataUrl||"");
+  if(!m) throw new Error("Format tidak didukung (hanya jpg, jpeg, png, webp)");
+  if(dataUrl.length > 5*1024*1024*1.37) throw new Error("Ukuran foto melebihi 5 MB");
+  const ext = m[1]==="jpeg" ? "jpg" : m[1];
+  const now = new Date();
+  const path = "uploads/"+now.getFullYear()+"/"+String(now.getMonth()+1).padStart(2,"0")+"/"+String(now.getDate()).padStart(2,"0")+"/"+gcsUuid()+"."+ext;
+  const r = storageApi.sRef(gcsBucketRef(), path);
+  await storageApi.uploadString(r, dataUrl, "data_url");
+  const url = await storageApi.getDownloadURL(r);
+  return { path, url };
+}
+async function gcsDeleteByUrl(url){
+  try{
+    if(!storageApi || !url || !/^https?:/.test(url)) return;
+    const m = /\/o\/([^?]+)/.exec(url); // ambil path objek dari download URL
+    if(!m) return;
+    const path = decodeURIComponent(m[1]);
+    await storageApi.deleteObject(storageApi.sRef(gcsBucketRef(), path));
+  }catch(e){ console.warn("Hapus objek GCS gagal (diabaikan):", e.message||e); }
+}
+/* Dipanggil form: kompres dulu, lalu unggah ke GCS bila aktif; fallback base64 bila gagal */
+function processPhoto(file, cb){
+  compressImage(file, async data=>{
+    if(!gcsReady()){ cb(data); return; }
+    try{
+      const res = await gcsUploadDataUrl(data);
+      cb(res.url);
+    }catch(e){
+      console.warn("Upload GCS gagal, memakai base64:", e.message||e);
+      toast("⚠ Upload ke Cloud Storage gagal ("+(e.message||"kesalahan")+") — foto disimpan cara lama");
+      cb(data);
+    }
+  });
+}
 function compressImage(file, cb){
   const img = new Image();
   const rd = new FileReader();
@@ -1940,11 +2007,11 @@ function closeModal(){ $("#modalBack").classList.remove("open"); document.body.s
 
 $("#mFoto").addEventListener("change", e=>{
   const f = e.target.files[0]; if(!f) return;
-  compressImage(f, data=>{ fotoData=data; const p=$("#mFotoPrev"); p.src=data; p.style.display="block"; });
+  processPhoto(f, data=>{ fotoData=data; const p=$("#mFotoPrev"); p.src=data; p.style.display="block"; });
 });
 $("#mFotoTemuan").addEventListener("change", e=>{
   const f = e.target.files[0]; if(!f) return;
-  compressImage(f, data=>{ fotoTemuanData=data; const p=$("#mFotoTemuanPrev"); p.src=data; p.style.display="block"; });
+  processPhoto(f, data=>{ fotoTemuanData=data; const p=$("#mFotoTemuanPrev"); p.src=data; p.style.display="block"; });
 });
 
 $("#btnSave").addEventListener("click", ()=>{
@@ -2899,6 +2966,53 @@ function fotoCellHtml(it){
     ${th(it.fotoTemuan,"Temuan","📷")}${th(it.foto,"Bukti","🖼️")}</div>`;
 }
 
+/* ---- panel pengaturan Google Cloud Storage ---- */
+function renderGcsPanel(){
+  const el = $("#gcsStatus"); if(!el) return;
+  const cfg = fotoStorageCfg();
+  $("#gcsBucket").value = cfg.bucket || "";
+  $("#btnGcsOff").style.display = cfg.enabled ? "inline-flex" : "none";
+  if(!storageApi){
+    el.innerHTML = '<span class="chip chip-red">Tidak tersedia</span> SDK Storage belum termuat (periksa koneksi).';
+  } else if(cfg.enabled){
+    el.innerHTML = '<span class="chip chip-green">Aktif</span> Foto baru diunggah ke bucket <b>'+esc(cfg.bucket||"(bawaan project)")+'</b>.'+(cfg.testedAt?' Diuji '+fmtDate(cfg.testedAt.slice(0,10))+'.':'');
+  } else {
+    el.innerHTML = '<span class="chip chip-gray">Nonaktif</span> Foto saat ini disimpan base64 di Firestore.';
+  }
+}
+async function gcsTestAndEnable(){
+  if(!storageApi){ toast("⚠ SDK Storage belum termuat"); return; }
+  if(!isAdmin()){ toast("⚠ Hanya Admin yang dapat mengubah pengaturan ini"); return; }
+  const btn = $("#btnGcsTest"); btn.disabled = true; btn.textContent = "Menguji…";
+  const prev = fotoStorageCfg();
+  db.meta.fotoStorage = { enabled:true, bucket: $("#gcsBucket").value.trim(), testedAt:null };
+  try{
+    // uji nyata: unggah gambar mungil → ambil URL → hapus lagi
+    const tiny = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const res = await gcsUploadDataUrl(tiny);
+    await gcsDeleteByUrl(res.url);
+    db.meta.fotoStorage.testedAt = new Date().toISOString();
+    save();
+    toast("✓ Google Cloud Storage aktif — foto baru akan diunggah ke bucket");
+  }catch(e){
+    db.meta.fotoStorage = prev; // gagal → kembalikan
+    console.warn("Uji GCS gagal:", e);
+    const msg = /storage\/unauthorized|403/i.test(String(e && (e.code||e.message))) ?
+      "Akses ditolak — pasang Storage Rules (file storage.rules) dan pastikan bucket tertaut di Firebase Console" :
+      /storage\/unknown|bucket|404/i.test(String(e && (e.code||e.message))) ?
+      "Bucket tidak ditemukan / belum ditautkan ke project Firebase" : (e.message||"kesalahan tidak dikenal");
+    toast("⚠ Uji gagal: "+msg);
+  }
+  btn.disabled = false; btn.textContent = "🧪 Uji & Aktifkan";
+  renderGcsPanel();
+}
+$("#btnGcsTest").addEventListener("click", gcsTestAndEnable);
+$("#btnGcsOff").addEventListener("click", ()=>{
+  if(!isAdmin()){ toast("⚠ Hanya Admin"); return; }
+  db.meta.fotoStorage = {enabled:false, bucket:$("#gcsBucket").value.trim()};
+  save(); renderGcsPanel(); toast("Penyimpanan foto kembali ke base64 (bawaan)");
+});
+
 /* ---- penampil foto temuan & bukti ---- */
 function openPhotoView(id){
   const it = db.items.find(x=>x.id===id); if(!it) return;
@@ -3295,6 +3409,7 @@ function renderAll(){
   renderAll();
   enhanceAllSelects();
   renderStorageNote();
+  renderGcsPanel();
   if(!currentUser) showLogin();
   else setTimeout(autoSync, 1200); // sinkron otomatis setelah halaman siap
 })();
