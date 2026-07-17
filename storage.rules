@@ -1,18 +1,28 @@
 rules_version = '2';
-// Storage Rules — Task Force OSE (pasang: Firebase Console → Storage → Rules → Publish)
-// Baca publik (URL foto bisa dibuka), tulis hanya gambar ≤5MB ke folder uploads/,
-// hapus diizinkan (untuk fitur ganti/hapus foto). Tanpa kredensial di aplikasi.
+// Storage Rules — Task Force OSE (bucket gs://task-force)
+// Pasang: Firebase Console → Storage → pilih bucket task-force → Rules → Publish
+//
+// Kebijakan:
+//   • READ  : publik (URL foto bisa dibuka di laporan/WA)
+//   • CREATE: hanya sesi login Firebase Auth, hanya gambar jpg/jpeg/png/webp, maks 5 MB,
+//             hanya di folder uploads/YYYY/MM/DD/
+//   • UPDATE: ditolak (objek tidak bisa ditimpa — nama UUID selalu baru)
+//   • DELETE: hanya ADMIN — UID sesi harus terdaftar di Firestore:
+//             commandCenter/app/storageAdmins/{uid} (didaftarkan otomatis saat Admin login)
+//   • Semua folder selain uploads/: DITOLAK
 service firebase.storage {
   match /b/{bucket}/o {
     match /uploads/{year}/{month}/{day}/{file} {
       allow read: if true;
-      allow write: if request.resource != null
-                   && request.resource.size <= 5 * 1024 * 1024
-                   && request.resource.contentType.matches('image/(jpeg|png|webp)');
-      allow delete: if true;
+      allow create: if request.auth != null
+                    && request.resource.size <= 5 * 1024 * 1024
+                    && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow update: if false;
+      allow delete: if request.auth != null
+                    && firestore.exists(/databases/(default)/documents/commandCenter/app/storageAdmins/$(request.auth.uid));
     }
     match /{allPaths=**} {
-      allow read, write: if false; // di luar uploads/: tertutup
+      allow read, write: if false;
     }
   }
 }
