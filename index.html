@@ -1408,6 +1408,16 @@ function migrate(){
     });
   }
   if(!db.meta.minAppVersion || db.meta.minAppVersion < APP_VERSION) db.meta.minAppVersion = APP_VERSION;
+  // Konektor LMS: pastikan adapter & endpoint terpasang (baseUrl resmi dari dokumentasi API)
+  {
+    const lms = db.integrations.find(c=>c.id==="lms");
+    if(lms){
+      if(lms.adapter!=="lms_avg"){ lms.adapter = "lms_avg"; }
+      if(!lms.baseUrl || /lms\.apotekku/i.test(lms.baseUrl)===false) lms.baseUrl = "https://lms.apotekkuapp.com";
+      lms.authType = "api_key"; lms.headerName = "X-API-KEY"; lms.keyEnv = lms.keyEnv||"APIKEY_LMS";
+      lms.endpoints = Object.assign({}, lms.endpoints, {avgScore:"/api/outlet-avg-score"});
+    }
+  }
   // Penyimpanan foto: default GCS aktif via Cloud Run signer (deploy tim) — bisa diubah di panel Data
   if(!db.meta.fotoStorage) db.meta.fotoStorage = {enabled:true, bucket:"task-force", signEndpoint:GCS_SIGNER_DEFAULT};
   else if(db.meta.fotoStorage.signEndpoint===undefined) db.meta.fotoStorage.signEndpoint = GCS_SIGNER_DEFAULT;
@@ -2633,6 +2643,61 @@ function bscNormalize(row, period, bestPoints){
     created_at: new Date().toISOString()
   };
 }
+/* ---- Adapter LMS Pelatihan & Kompetensi ----
+   GET {base}/api/outlet-avg-score?start_date=...&end_date=... (header X-API-KEY)
+   Respons: [{nama, score}] — rata-rata skor outlet pada rentang tanggal.
+   Dipetakan ke parameter "kompetensi" (target dari PARAMS). Rentang: 7 hari terakhir,
+   satu record per outlet per hari sinkron → tren harian di sparkline. */
+async function syncLms(cfg, quiet){
+  const which = {v:"data"};
+  try{
+    const end = todayStr();
+    const start = new Date(Date.now()-7*24*3600*1000).toISOString().slice(0,10);
+    const url = joinUrl(cfg.baseUrl, (cfg.endpoints&&cfg.endpoints.avgScore)||"/api/outlet-avg-score")
+      + "?start_date="+start+"&end_date="+end;
+    const rows = await fetchJson(cfg, url);
+    const arr = Array.isArray(rows) ? rows : (rows.data||[]);
+    const tgt = (PARAMS.find(p=>p.id==="kompetensi")||{}).target || 80;
+    const normalized = arr.map(r=>{
+      let outlet = String(r.nama||r.outlet||"").trim();
+      const byName = OUTLETS.find(o=>o.name.toLowerCase()===outlet.toLowerCase());
+      if(byName) outlet = byName.name;
+      const score = (r.score===null||r.score===undefined||r.score==="") ? null : Math.round(Number(r.score)*100)/100;
+      const noData = score===null || isNaN(score);
+      return {
+        source_system: "lms_avg",
+        source_record_id: "lms-"+outlet+"-"+end,
+        team: "HGPGA", team_source: "human_growth",
+        outlet_id: outlet || "(tidak diketahui)",
+        review_date: end,
+        parameter: "kompetensi",
+        score: noData? null : score,
+        target: tgt,
+        status: noData? "no_data" : normStatus(score, tgt, "up"),
+        finding: noData? "Data LMS periode terpilih belum tersedia"
+               : (score < tgt ? "Skor LMS "+fmtVal(score,"")+" — di bawah target "+tgt+" (pelatihan & kompetensi perlu penguatan)" : ""),
+        evidence_url: "", is_repeated: false,
+        period: end.slice(0,7),
+        created_at: new Date().toISOString()
+      };
+    });
+    upsertNormalized(normalized, cfg.id);
+    cfg.count = normalized.length;
+    cfg.status = "connected"; cfg.lastSync = new Date().toISOString(); cfg.lastError = "";
+    return {ok:true, n:normalized.length};
+  }catch(e){
+    cfg.status = "failed";
+    cfg.lastError = "["+which.v+"] "+humanConnError(cfg, e, e.url);
+    if((e.status===401||e.status===403) && localStorage.getItem("tf_key_"+cfg.id)){
+      forgetDeviceKey(cfg.id);
+      if(!quiet && typeof prompt==="function" && askSessionKey(cfg)) return syncLms(cfg, quiet);
+    } else if(!quiet && (e.status===401||e.status===403) && !sessionApiKeys[cfg.id] && typeof prompt==="function"){
+      if(askSessionKey(cfg)) return syncLms(cfg, quiet);
+    }
+    return {ok:false, why: cfg.lastError};
+  }
+}
+
 /* Rata-rata Konversi BSC = mean skor konversi terkini per outlet (no_data diabaikan) — angka yang sama dengan kartu Rapot */
 function bscAvgConversion(){
   const byOutlet = {};
@@ -2724,6 +2789,7 @@ async function syncConnector(id, opts){
   if(c.internal){ refreshInternalData(); return {ok:true}; }
   if(!c.baseUrl){ c.status="not_integrated"; return {ok:false, why:"Belum dikonfigurasi"}; }
   if(c.adapter==="bsc_v2") return syncBsc(c, quiet);
+  if(c.adapter==="lms_avg") return syncLms(c, quiet);
   // ---- konektor generik: endpoint findings per-sistem ----
   const url = joinUrl(c.baseUrl, (c.endpoints&&c.endpoints.findings)||"/api/review-rutin/findings")+"?system="+id;
   try{
