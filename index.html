@@ -752,6 +752,13 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
       <div class="field"><label>Sync Frequency</label>
         <select id="cnFreq"><option value="harian">Harian</option><option value="per_jam">Per Jam</option><option value="mingguan">Mingguan</option></select>
       </div>
+      <div class="field full" id="cnKeyRow" style="display:none;margin-top:8px">
+        <label>API Key</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span id="cnKeyInfo" style="font-size:12.5px;color:var(--ink-soft)"></span>
+          <button type="button" class="btn btn-ghost" id="btnCnForgetKey">Lupakan key di perangkat ini</button>
+        </div>
+      </div>
       <div class="field"><label>Header Name</label><input id="cnHeader" placeholder="X-API-Key"></div>
       <div class="field"><label>Environment Variable API Key (server-side)</label><input id="cnEnv" placeholder="contoh: APIKEY_BSC_SYS"></div>
       <div class="field full" id="cnEpWrap">
@@ -2400,21 +2407,42 @@ function joinUrl(base, path){
 const sessionApiKeys = {};
 function apiHeaders(cfg){
   const h = {"Accept":"application/json"};
-  const key = sessionApiKeys[cfg.id];
+  const key = getApiKey(cfg);
   if(key){
     if(cfg.authType==="bearer") h["Authorization"] = "Bearer "+key;
     else h[cfg.headerName||"X-API-Key"] = key;
   }
   return h;
 }
+/* API key konektor: prioritas memori sesi → tersimpan di PERANGKAT ini (localStorage).
+   Tidak pernah disimpan di database/cloud (yang bisa terbaca pengguna lain). */
+function getApiKey(cfg){
+  return sessionApiKeys[cfg.id] || localStorage.getItem("tf_key_"+cfg.id) || "";
+}
+function forgetDeviceKey(id){ localStorage.removeItem("tf_key_"+id); delete sessionApiKeys[id]; }
 function askSessionKey(cfg){
   const k = prompt("Masukkan API key untuk "+cfg.name.split("(")[0].trim()+
-    "\n(header: "+(cfg.headerName||"X-API-Key")+", env server: "+(cfg.keyEnv||"-")+")\n"+
-    "Key hanya dipakai di sesi ini — TIDAK disimpan di browser maupun database.", "");
-  if(k && k.trim()){ sessionApiKeys[cfg.id]=k.trim(); return true; }
+    "\n(header: "+(cfg.headerName||"X-API-Key")+", env server: "+(cfg.keyEnv||"-")+")", "");
+  if(k && k.trim()){
+    sessionApiKeys[cfg.id]=k.trim();
+    if(confirm("Ingat API key ini di PERANGKAT ini?\n\n✔ Tidak akan ditanya lagi di browser ini (termasuk saat sinkron otomatis)\n✖ Key tersimpan hanya di browser ini — jangan gunakan di komputer bersama.\n\nPilih Cancel bila hanya untuk sesi ini.")){
+      localStorage.setItem("tf_key_"+cfg.id, k.trim());
+    }
+    return true;
+  }
   return false;
 }
 function connCfg(id){ return db.integrations.find(c=>c.id===id); }
+function renderConnKeyRow(id){
+  const row = $("#cnKeyRow"); if(!row) return;
+  const has = !!localStorage.getItem("tf_key_"+id);
+  row.style.display = "block";
+  row.dataset.connId = id;
+  $("#cnKeyInfo").innerHTML = has ?
+    '✔ Tersimpan di perangkat ini — sinkron (termasuk otomatis) tidak menanyakan key lagi.' :
+    'Belum tersimpan di perangkat ini. Saat sinkron manual pertama, key diminta sekali dengan pilihan <b>ingat di perangkat</b>.';
+  $("#btnCnForgetKey").style.display = has ? "inline-flex" : "none";
+}
 
 /* ---- wilayah dari alamat master outlet ---- */
 function outletRegion(name){
@@ -2681,8 +2709,11 @@ async function syncBsc(cfg, quiet){
     const failedUrl = e.url || urlSummary;
     const which = String(failedUrl).includes("/health") ? "health" : (String(failedUrl).includes("summary") ? "summary" : "priorities");
     cfg.lastError = "["+which+"] "+humanConnError(cfg, e, failedUrl);
-    if(!quiet && (e.status===401||e.status===403) && !sessionApiKeys[cfg.id] && typeof prompt==="function"){
-      if(askSessionKey(cfg)) return syncBsc(cfg); // ulangi sekali dengan key sesi (hanya sinkron manual)
+    if((e.status===401||e.status===403) && localStorage.getItem("tf_key_"+cfg.id)){
+      forgetDeviceKey(cfg.id); // key tersimpan sudah tidak berlaku — buang agar tak dipakai terus
+      if(!quiet && typeof prompt==="function" && askSessionKey(cfg)) return syncBsc(cfg);
+    } else if(!quiet && (e.status===401||e.status===403) && !sessionApiKeys[cfg.id] && typeof prompt==="function"){
+      if(askSessionKey(cfg)) return syncBsc(cfg); // tanya sekali (hanya sinkron manual)
     }
     return {ok:false, why:cfg.lastError, urlHealth, urlSummary};
   }
@@ -3190,6 +3221,10 @@ async function gcsTestAndEnable(){
   btn.disabled = false; btn.textContent = "🧪 Uji & Aktifkan";
   renderGcsPanel();
 }
+$("#btnCnForgetKey") && $("#btnCnForgetKey").addEventListener("click", ()=>{
+  const id = $("#cnKeyRow").dataset.connId; if(!id) return;
+  forgetDeviceKey(id); renderConnKeyRow(id); toast("API key dihapus dari perangkat ini");
+});
 $("#btnGcsTest").addEventListener("click", gcsTestAndEnable);
 $("#btnGcsOff").addEventListener("click", ()=>{
   if(!isAdmin()){ toast("⚠ Hanya Admin"); return; }
@@ -3220,6 +3255,7 @@ $("#photoViewBack").addEventListener("click", e=>{ if(e.target===e.currentTarget
 /* ---- modal konektor ---- */
 let connEditing=null;
 function openConnModal(id){
+  renderConnKeyRow(id);
   connEditing=id; const c=connCfg(id);
   $("#connTitle").textContent="Konfigurasi — "+c.name.split("(")[0].trim();
   $("#cnName").value=c.name; $("#cnBase").value=c.baseUrl||"";
