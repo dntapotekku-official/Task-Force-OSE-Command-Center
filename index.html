@@ -1413,8 +1413,18 @@ function migrate(){
     const lms = db.integrations.find(c=>c.id==="lms");
     if(lms){
       if(lms.adapter!=="lms_avg"){ lms.adapter = "lms_avg"; }
-      if(!lms.baseUrl || /lms\.apotekku/i.test(lms.baseUrl)===false) lms.baseUrl = "https://lms.apotekkuapp.com";
-      lms.authType = "api_key"; lms.headerName = "X-API-KEY"; lms.keyEnv = lms.keyEnv||"APIKEY_LMS";
+      // Base URL WAJIB tanpa path (kesalahan umum: menempel /home dari alamat halaman)
+      lms.baseUrl = "https://lms.apotekkuapp.com";
+      lms.authType = "api_key"; lms.headerName = "X-API-KEY";
+      // keyEnv = NAMA variabel, bukan key. Bila terisi key sungguhan (hex panjang),
+      // selamatkan ke penyimpanan perangkat lalu BERSIHKAN dari database.
+      if(lms.keyEnv && /^[0-9a-f]{32,}$/i.test(String(lms.keyEnv).trim())){
+        try{ if(!localStorage.getItem("tf_key_lms")) localStorage.setItem("tf_key_lms", String(lms.keyEnv).trim()); }catch(e){}
+        lms.keyEnv = "APIKEY_LMS";
+        console.warn("[LMS] API key ditemukan di kolom keyEnv — dipindah ke perangkat & dibersihkan dari database. Mohon rotate key.");
+        setTimeout(()=>{ try{ save(); }catch(e){} }, 1200); // dorong pembersihan ke cloud segera
+      }
+      if(!lms.keyEnv) lms.keyEnv = "APIKEY_LMS";
       lms.endpoints = Object.assign({}, lms.endpoints, {avgScore:"/api/outlet-avg-score"});
     }
   }
