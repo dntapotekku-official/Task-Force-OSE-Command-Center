@@ -210,6 +210,9 @@ tbody tr.overdue-row:hover{background:#fae7e3}
 .field textarea{resize:vertical;min-height:64px}
 .modal-foot{padding:15px 22px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .x-btn{background:none;border:none;font-size:22px;color:var(--ink-faint);line-height:1}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-2px;animation:spin .75s linear infinite}
+button[disabled]{opacity:.72;cursor:wait}
+@keyframes spin{to{transform:rotate(360deg)}}
 .hist{grid-column:1/-1;font-size:12px;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:10px 13px;max-height:120px;overflow:auto}
 .hist div{padding:2px 0}
 .photo-thumb{max-width:100%;max-height:150px;border-radius:9px;border:1px solid var(--line);margin-top:7px;display:block}
@@ -348,13 +351,21 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
 /* Toast */
 #toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:11px 20px;border-radius:99px;font-size:13.5px;font-weight:600;opacity:0;pointer-events:none;transition:all .25s ease;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.25)}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.sync-monitor-stack{position:fixed;right:20px;bottom:22px;width:min(340px,calc(100vw - 32px));display:flex;flex-direction:column;gap:9px;z-index:98;max-height:calc(100vh - 44px);overflow:auto}
+.sync-monitor{width:100%;display:flex;align-items:flex-start;gap:12px;background:#fff;border:1px solid var(--line);border-left:4px solid var(--brand);border-radius:8px;padding:13px 15px;box-shadow:0 12px 34px rgba(13,28,25,.2);animation:fadeUp .2s ease}
+.sync-monitor.done{border-left-color:var(--green)}
+.sync-monitor.failed{border-left-color:var(--red)}
+.sync-monitor-copy{min-width:0;flex:1}
+.sync-monitor-title{font-size:13.5px;font-weight:700;color:var(--ink)}
+.sync-monitor-detail{font-size:12px;color:var(--ink-soft);margin-top:2px}
+.sync-monitor-time{font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:700;color:var(--brand-deep);white-space:nowrap}
 
 .empty{padding:44px 20px;text-align:center;color:var(--ink-faint);font-size:14px}
 
 /* ======= Print ======= */
 @media print{
   body{background:#fff}
-  .sidebar,.ctop,.side-backdrop,.report-actions,.toolbar,#toast,.brief-box,.login-back{display:none!important}
+  .sidebar,.ctop,.side-backdrop,.report-actions,.toolbar,#toast,.sync-monitor-stack,.brief-box,.login-back{display:none!important}
   main{padding:0;max-width:none}
   .view{display:none!important}
   #view-laporan{display:block!important}
@@ -761,6 +772,7 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
       </div>
       <div class="field"><label>Header Name</label><input id="cnHeader" placeholder="X-API-Key"></div>
       <div class="field"><label>Environment Variable API Key (server-side)</label><input id="cnEnv" placeholder="contoh: APIKEY_BSC_SYS"></div>
+      <div class="field"><label>Timeout Sinkron (menit)</label><input id="cnTimeout" type="number" min="0.2" step="0.1" placeholder="LMS default 10"></div>
       <div class="field full" id="cnEpWrap">
         <label>Endpoint per Sistem (relatif terhadap Base URL — jangan ulangi path base)</label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:4px">
@@ -770,6 +782,7 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
           <div class="field"><label style="font-size:10.5px">Priorities</label><input id="cnEpPriorities" placeholder="/bsc/priorities"></div>
           <div class="field"><label style="font-size:10.5px">KPI</label><input id="cnEpKpis" placeholder="/bsc/kpis"></div>
           <div class="field"><label style="font-size:10.5px">Action Plan</label><input id="cnEpActions" placeholder="/bsc/action-plans"></div>
+          <div class="field" id="cnEpAvgScoreWrap"><label style="font-size:10.5px">LMS Avg Score</label><input id="cnEpAvgScore" placeholder="/api/outlet-avg-score"></div>
           <div class="field" id="cnEpFindingsWrap" style="grid-column:1/-1"><label style="font-size:10.5px">Findings (sistem generik)</label><input id="cnEpFindings" placeholder="/api/review-rutin/findings"></div>
         </div>
       </div>
@@ -875,6 +888,7 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
   </div>
 </div>
 
+<div id="syncMonitorStack" class="sync-monitor-stack" aria-live="polite"></div>
 <div id="toast"></div>
 <script>
 /* ================= KONSTANTA ================= */
@@ -962,7 +976,7 @@ const firebaseState = { status:"idle", message:"Firebase belum diinisialisasi." 
    Dipakai untuk menulis HANYA dokumen yang diubah sesi ini. Tanpa ini, setiap save
    menulis-ulang seluruh koleksi dari salinan memori — sesi lain yang datanya basi
    akan menimpa foto/perubahan yang baru diunggah rekan (akar masalah foto hilang). */
-const APP_VERSION = 5; // dinaikkan tiap rilis yang mengubah cara simpan
+const APP_VERSION = 12; // dinaikkan tiap rilis yang mengubah cara simpan
 let appStale = false;   // true bila cloud menandai versi minimum lebih baru → tab ini dikunci tulis
 let cloudShadow = null;
 function stableStringify(v){
@@ -1473,6 +1487,42 @@ function isOverdue(it){ return it.timeline && it.timeline < todayStr() && it.sta
 function dueDays(it){ if(!it.timeline) return null; const ms = new Date(it.timeline+"T00:00:00") - new Date(todayStr()+"T00:00:00"); return Math.round(ms/86400000); }
 function outlets(){ return [...new Set(db.items.map(i=>i.outlet))]; }
 function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2600); }
+let syncMonitorSeq = 0;
+const syncMonitors = new Map();
+function beginSyncMonitor(systemName){
+  const token = ++syncMonitorSeq;
+  const started = Date.now();
+  const box = document.createElement("div");
+  box.className = "sync-monitor";
+  box.setAttribute("role", "status");
+  box.innerHTML = '<span class="spin sync-monitor-icon" aria-hidden="true"></span><div class="sync-monitor-copy"><div class="sync-monitor-title"></div><div class="sync-monitor-detail">Menghubungkan ke server. Mohon jangan tutup halaman.</div></div><span class="sync-monitor-time">00:00</span>';
+  box.querySelector(".sync-monitor-title").textContent = "Sinkronisasi "+systemName;
+  $("#syncMonitorStack").appendChild(box);
+  const detail = box.querySelector(".sync-monitor-detail");
+  const time = box.querySelector(".sync-monitor-time");
+  const tick = ()=>{
+    const sec=Math.floor((Date.now()-started)/1000);
+    time.textContent=String(Math.floor(sec/60)).padStart(2,"0")+":"+String(sec%60).padStart(2,"0");
+    if(sec>=120) detail.textContent="Server masih memproses data. Request tetap aktif, mohon tunggu.";
+    else if(sec>=15) detail.textContent="Request masih aktif. Menunggu server menyiapkan data.";
+  };
+  tick();
+  syncMonitors.set(token, {box, systemName, timer:setInterval(tick,1000)});
+  return token;
+}
+function finishSyncMonitor(token, ok, detail){
+  const monitor = syncMonitors.get(token);
+  if(!monitor) return;
+  clearInterval(monitor.timer);
+  const {box, systemName} = monitor;
+  box.classList.add(ok?"done":"failed");
+  const icon=box.querySelector(".sync-monitor-icon");
+  icon.className="sync-monitor-icon";
+  icon.textContent=ok?"\u2713":"!";
+  box.querySelector(".sync-monitor-title").textContent="Sinkronisasi "+systemName+(ok?" selesai":" gagal");
+  box.querySelector(".sync-monitor-detail").textContent=detail||(ok?"Data sedang diterapkan ke dashboard.":"Periksa pesan error koneksi.");
+  setTimeout(()=>{ box.remove(); syncMonitors.delete(token); },4000);
+}
 function pct(n,d){ return d? Math.round(n/d*100):0; }
 
 function stats(items){
@@ -2573,7 +2623,8 @@ function ingest(records, sysId){
 
 /* ---- sinkronisasi API ---- */
 async function fetchJson(cfg, url){
-  const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), 10000);
+  const timeoutMs = Number(cfg.timeoutMs || 10000);
+  const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), timeoutMs);
   let res;
   try{ res = await fetch(url, {signal:ctl.signal, headers:apiHeaders(cfg)}); }
   finally{ clearTimeout(to); }
@@ -2585,9 +2636,9 @@ async function fetchJson(cfg, url){
   return res.json();
 }
 function humanConnError(cfg, e, url){
-  if(e.name==="AbortError") return "Timeout 10 detik — server tidak merespons.";
+  if(e.name==="AbortError") return "Timeout "+Math.round(Number(cfg.timeoutMs||10000)/1000)+" detik — server tidak merespons.";
   if(e.status===401 || e.status===403)
-    return "API key BSC tidak valid atau belum tersedia di environment variable "+(cfg.keyEnv||"APIKEY_BSC_SYS")+".";
+    return "API key "+(cfg.name||cfg.id||"sistem")+" tidak valid atau tidak memiliki akses.";
   if(e.status===404){
     console.warn("[integrasi] 404 — URL final yang dipanggil:", url); // tanpa API key
     return "Endpoint tidak ditemukan (404). URL final dicatat di console log untuk diperiksa.";
@@ -2654,18 +2705,18 @@ function bscNormalize(row, period, bestPoints){
   };
 }
 /* ---- Adapter LMS Pelatihan & Kompetensi ----
-   GET {base}/api/outlet-avg-score?start_date=...&end_date=... (header X-API-KEY)
-   Respons: [{nama, score}] — rata-rata skor outlet pada rentang tanggal.
-   Dipetakan ke parameter "kompetensi" (target dari PARAMS). Rentang: 7 hari terakhir,
-   satu record per outlet per hari sinkron → tren harian di sparkline. */
+   GET {base}/api/outlet-avg-score?date=... (header X-API-KEY)
+   Parameter date opsional; tanpa date, API memakai batas tanggal hari ini.
+   Respons: [{nama, score}] — rata-rata skor outlet sampai tanggal batas.
+   Dipetakan ke parameter "kompetensi" (target dari PARAMS). */
 async function syncLms(cfg, quiet){
-  const which = {v:"data"};
+  const requestCfg = {...cfg, timeoutMs:Number(cfg.timeoutMs)||10*60*1000};
   try{
-    const end = todayStr();
-    const start = new Date(Date.now()-7*24*3600*1000).toISOString().slice(0,10);
-    const url = joinUrl(cfg.baseUrl, (cfg.endpoints&&cfg.endpoints.avgScore)||"/api/outlet-avg-score")
-      + "?start_date="+start+"&end_date="+end;
-    const rows = await fetchJson(cfg, url);
+    const today = todayStr();
+    const end = ((($("#rvTo") && $("#rvTo").value) || today)).slice(0,10);
+    const baseUrl = joinUrl(cfg.baseUrl, (cfg.endpoints&&cfg.endpoints.avgScore)||"/api/outlet-avg-score");
+    const url = end && end!==today ? baseUrl+"?date="+encodeURIComponent(end) : baseUrl;
+    const rows = await fetchJson(requestCfg, url);
     const arr = Array.isArray(rows) ? rows : (rows.data||[]);
     const tgt = (PARAMS.find(p=>p.id==="kompetensi")||{}).target || 80;
     const normalized = arr.map(r=>{
@@ -2697,7 +2748,7 @@ async function syncLms(cfg, quiet){
     return {ok:true, n:normalized.length};
   }catch(e){
     cfg.status = "failed";
-    cfg.lastError = "["+which.v+"] "+humanConnError(cfg, e, e.url);
+    cfg.lastError = "[data] "+humanConnError(requestCfg, e, e.url);
     if((e.status===401||e.status===403) && localStorage.getItem("tf_key_"+cfg.id)){
       forgetDeviceKey(cfg.id);
       if(!quiet && typeof prompt==="function" && askSessionKey(cfg)) return syncLms(cfg, quiet);
@@ -2798,18 +2849,37 @@ async function syncConnector(id, opts){
   const c = connCfg(id);
   if(c.internal){ refreshInternalData(); return {ok:true}; }
   if(!c.baseUrl){ c.status="not_integrated"; return {ok:false, why:"Belum dikonfigurasi"}; }
-  if(c.adapter==="bsc_v2") return syncBsc(c, quiet);
-  if(c.adapter==="lms_avg") return syncLms(c, quiet);
-  // ---- konektor generik: endpoint findings per-sistem ----
-  const url = joinUrl(c.baseUrl, (c.endpoints&&c.endpoints.findings)||"/api/review-rutin/findings")+"?system="+id;
+  if(c.authType==="api_key" && !getApiKey(c)){
+    if(quiet) return {ok:false, why:"API key belum tersimpan di perangkat ini."};
+    if(!askSessionKey(c)) return {ok:false, why:"Sinkronisasi dibatalkan karena API key belum diisi."};
+  }
+  const monitorToken = quiet ? null : beginSyncMonitor(c.name||id);
   try{
-    const data = await fetchJson(c, url);
-    const arr = Array.isArray(data)? data : (data.records||data.data||[]);
-    ingest(arr, id);
-    c.status="connected"; c.lastSync=new Date().toISOString(); c.lastError="";
-    return {ok:true, n:arr.length};
+    let result;
+    if(c.adapter==="bsc_v2") result = await syncBsc(c, quiet);
+    else if(c.adapter==="lms_avg") result = await syncLms(c, quiet);
+    else {
+      const url = joinUrl(c.baseUrl, (c.endpoints&&c.endpoints.findings)||"/api/review-rutin/findings")+"?system="+id;
+      try{
+        const data = await fetchJson(c, url);
+        const arr = Array.isArray(data)? data : (data.records||data.data||[]);
+        ingest(arr, id);
+        c.status="connected"; c.lastSync=new Date().toISOString(); c.lastError="";
+        result = {ok:true, n:arr.length};
+      }catch(e){
+        c.status="failed"; c.lastError = humanConnError(c, e, url);
+        result = {ok:false, why:c.lastError};
+      }
+    }
+    const detail = result.ok
+      ? (Number.isFinite(result.n) ? result.n+" data berhasil diterima." : "Data berhasil diperbarui.")
+      : (result.why||"Server mengembalikan error atau koneksi terputus.");
+    finishSyncMonitor(monitorToken, !!result.ok, detail);
+    return result;
   }catch(e){
-    c.status="failed"; c.lastError = humanConnError(c, e, url);
+    c.status="failed";
+    c.lastError = e && e.message ? e.message : "Sinkronisasi gagal.";
+    finishSyncMonitor(monitorToken, false, c.lastError);
     return {ok:false, why:c.lastError};
   }
 }
@@ -2846,12 +2916,19 @@ async function autoSync(){
 setInterval(()=>{ checkAppVersion(); autoSync(); migratePendingUploads(6); }, AUTO_SYNC_INTERVAL_MS);
 
 async function syncAll(){
+  const btn = $("#btnSyncAll");
+  const oldHtml = btn ? btn.innerHTML : "";
+  if(btn){ btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Sinkronisasi…'; }
   toast("⟳ Sinkronisasi berjalan…");
-  for(const c of db.integrations){ await syncConnector(c.id); }
-  db.meta.lastSyncAll = new Date().toISOString();
-  save(); renderAktivitas(); renderDashboard(); renderReport();
-  const fail = db.integrations.filter(c=>c.status==="failed").length;
-  toast(fail? "Sinkron selesai — "+fail+" sistem gagal" : "✓ Sinkronisasi selesai");
+  try{
+    for(const c of db.integrations){ await syncConnector(c.id); }
+    db.meta.lastSyncAll = new Date().toISOString();
+    save(); renderAktivitas(); renderDashboard(); renderReport();
+    const fail = db.integrations.filter(c=>c.status==="failed").length;
+    toast(fail? "Sinkron selesai — "+fail+" sistem gagal" : "✓ Sinkronisasi selesai");
+  } finally {
+    if(btn){ btn.disabled = false; btn.innerHTML = oldHtml || "⟳ Sinkronkan Sekarang"; }
+  }
 }
 function connEffStatus(c){
   if(c.status==="connected" && c.lastSync){
@@ -3022,7 +3099,19 @@ function renderAktivitas(){
         <button class="mini-act rv-csv" data-id="${c.id}">⬆ CSV</button>`:'<span class="muted" style="font-size:11.5px">otomatis (internal)</span>'}
       </td></tr>`;
   }).join("");
-  $$(".rv-sync").forEach(b=>b.addEventListener("click", async()=>{ toast("⟳ Sinkron "+b.dataset.id+"…"); await syncConnector(b.dataset.id); save(); renderAktivitas(); }));
+  $$(".rv-sync").forEach(b=>b.addEventListener("click", async()=>{
+    const oldHtml = b.innerHTML;
+    b.disabled = true;
+    b.innerHTML = '<span class="spin"></span> Sinkron…';
+    toast("⟳ Sinkron "+b.dataset.id+"…");
+    try{
+      await syncConnector(b.dataset.id);
+      save(); renderAktivitas();
+    } finally {
+      b.disabled = false;
+      b.innerHTML = oldHtml;
+    }
+  }));
   $$(".rv-cfg").forEach(b=>b.addEventListener("click", ()=>openConnModal(b.dataset.id)));
   $$(".rv-csv").forEach(b=>b.addEventListener("click", ()=>{ csvTargetSys=b.dataset.id; $("#csvUpload").click(); }));
 
@@ -3339,12 +3428,15 @@ function openConnModal(id){
   ssRefresh("cnAuth"); ssRefresh("cnFreq");
   $("#cnHeader").value=c.headerName||"X-API-Key";
   $("#cnEnv").value=c.keyEnv||""; $("#cnMap").value=c.mapping||"";
+  $("#cnTimeout").value = c.timeoutMs ? Math.round((Number(c.timeoutMs)/60000)*10)/10 : (c.adapter==="lms_avg" ? 10 : "");
   const ep=c.endpoints||{};
   $("#cnEpHealth").value=ep.health||""; $("#cnEpSummary").value=ep.summary||"";
   $("#cnEpOutlets").value=ep.outlets||""; $("#cnEpPriorities").value=ep.priorities||"";
   $("#cnEpKpis").value=ep.kpis||""; $("#cnEpActions").value=ep.actionPlans||"";
+  $("#cnEpAvgScore").value=ep.avgScore||"/api/outlet-avg-score";
   $("#cnEpFindings").value=ep.findings||"";
   $("#cnEpFindingsWrap").style.display = c.adapter==="bsc_v2" ? "none" : "";
+  $("#cnEpAvgScoreWrap").style.display = "";
   $("#connModalBack").classList.add("open");
 }
 function closeConnModal(){ $("#connModalBack").classList.remove("open"); connEditing=null; }
@@ -3354,6 +3446,10 @@ $("#cnSave").addEventListener("click", ()=>{
   c.baseUrl=$("#cnBase").value.trim(); c.authType=$("#cnAuth").value; c.syncFreq=$("#cnFreq").value;
   c.headerName=$("#cnHeader").value.trim()||"X-API-Key";
   c.keyEnv=$("#cnEnv").value.trim(); c.mapping=$("#cnMap").value.trim();
+  const timeoutMin = Number($("#cnTimeout").value);
+  if($("#cnTimeout").value.trim() && (!isFinite(timeoutMin) || timeoutMin<=0)){ toast("⚠ Timeout sinkron harus lebih dari 0 menit"); return; }
+  if(timeoutMin>0) c.timeoutMs = Math.round(timeoutMin*60*1000);
+  else delete c.timeoutMs;
   c.endpoints = c.endpoints||{};
   c.endpoints.health=$("#cnEpHealth").value.trim();
   c.endpoints.summary=$("#cnEpSummary").value.trim();
@@ -3361,6 +3457,7 @@ $("#cnSave").addEventListener("click", ()=>{
   c.endpoints.priorities=$("#cnEpPriorities").value.trim();
   c.endpoints.kpis=$("#cnEpKpis").value.trim();
   c.endpoints.actionPlans=$("#cnEpActions").value.trim();
+  c.endpoints.avgScore=$("#cnEpAvgScore").value.trim()||"/api/outlet-avg-score";
   if(c.adapter!=="bsc_v2") c.endpoints.findings=$("#cnEpFindings").value.trim();
   if(!c.baseUrl && !c.viaCsv) c.status="not_integrated";
   save(); closeConnModal(); renderAktivitas(); toast("✓ Konfigurasi connector disimpan");
