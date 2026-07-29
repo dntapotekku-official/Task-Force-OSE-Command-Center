@@ -946,7 +946,7 @@ const KPIS = [
 ];
 
 /* Data bisnis tidak lagi hardcode — sumber data tunggal: Cloud Firestore */
-/* ================= PENYIMPANAN: LOKAL + CLOUD FIRESTORE ================= */
+/* ================= PENYIMPANAN: CLOUD FIRESTORE ================= */
 const KEY = "tf_ose_data_v2"; // v2: update FAST_IMPROVEMENT 13-14 Juli 2026
 let storageOk = false;
 try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); storageOk = true; }catch(e){ storageOk = false; }
@@ -976,7 +976,7 @@ const firebaseState = { status:"idle", message:"Firebase belum diinisialisasi." 
    Dipakai untuk menulis HANYA dokumen yang diubah sesi ini. Tanpa ini, setiap save
    menulis-ulang seluruh koleksi dari salinan memori — sesi lain yang datanya basi
    akan menimpa foto/perubahan yang baru diunggah rekan (akar masalah foto hilang). */
-const APP_VERSION = 12; // dinaikkan tiap rilis yang mengubah cara simpan
+const APP_VERSION = 13; // dinaikkan tiap rilis yang mengubah cara simpan
 let appStale = false;   // true bila cloud menandai versi minimum lebih baru → tab ini dikunci tulis
 let cloudShadow = null;
 function stableStringify(v){
@@ -1052,12 +1052,12 @@ function renderStorageNote(){
   const note = $("#storageNote");
   if(!note) return;
   const localMsg = storageOk
-    ? "Penyimpanan browser aktif sebagai cadangan lokal di perangkat ini."
-    : "Penyimpanan browser tidak tersedia di perangkat ini.";
+    ? "Cadangan data browser dinonaktifkan — sumber data hanya Cloud Firestore."
+    : "Penyimpanan browser tidak tersedia; sumber data tetap Cloud Firestore.";
   const cloudMsg = firebaseState.status==="ready"
     ? "Sinkronisasi cloud Firestore aktif — data dibagikan antar perangkat dan pengguna."
     : firebaseState.status==="error"
-      ? "Sinkronisasi cloud Firestore gagal, aplikasi tetap berjalan dengan penyimpanan lokal."
+      ? "Sinkronisasi cloud Firestore gagal; perubahan data tidak akan disimpan lokal."
       : firebaseState.status==="loading"
         ? "Menghubungkan sinkronisasi Firestore..."
         : "Sinkronisasi cloud Firestore belum aktif.";
@@ -1065,8 +1065,9 @@ function renderStorageNote(){
   note.innerHTML = `💾 <b>${localMsg}</b> ${cloudMsg} ${esc(firebaseState.message)}`;
 }
 function getLocalSnapshot(){
-  if(!storageOk) return null;
-  try{ const raw = localStorage.getItem(KEY); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+  // Data bisnis tidak lagi dibaca dari localStorage agar edit manual Firestore
+  // tidak tertimpa cadangan browser yang sudah basi.
+  return null;
 }
 function getSnapshotStamp(data){
   return (data && data.meta && data.meta.lastSavedAt) ? Date.parse(data.meta.lastSavedAt) || 0 : 0;
@@ -1085,7 +1086,7 @@ async function initFirebase(){
     const [
       { initializeApp },
       { getAnalytics, isSupported },
-      { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc },
+      { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc, onSnapshot },
       { getStorage, ref: sRef, uploadString, getDownloadURL, deleteObject },
       { getAuth, signInAnonymously, onAuthStateChanged },
       appCheckMod
@@ -1118,7 +1119,7 @@ async function initFirebase(){
       firebaseAuthUser = null;
     }
     const store = getFirestore(app);
-    firebaseApi = { collection, deleteDoc, doc, getDoc, getDocs, setDoc,
+    firebaseApi = { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, setDoc,
       rootRef: doc(store, FIREBASE_FS_ROOT.collection, FIREBASE_FS_ROOT.doc) };
     // Google Cloud Storage via Firebase Storage — tanpa kredensial di browser
     storageApi = { getStorage, sRef, uploadString, getDownloadURL, deleteObject, app };
@@ -1210,12 +1211,12 @@ async function pushCloudSnapshot(snapshot){
     }
   }catch(e){
     firebaseState.status = "error";
-    firebaseState.message = "Gagal mengirim perubahan ke Cloud Firestore, tetapi data lokal tetap tersimpan.";
+    firebaseState.message = "Gagal mengirim perubahan ke Cloud Firestore. Cadangan lokal data bisnis dinonaktifkan.";
     renderStorageNote();
     console.warn("Firebase save gagal:", e);
     if(!firebaseToastShown){
       firebaseToastShown = true;
-      toast("Sinkronisasi Firestore gagal. Data tetap aman di browser ini.");
+      toast("Sinkronisasi Firestore gagal. Muat ulang setelah koneksi pulih sebelum mengubah data lagi.");
     }
   }
 }
@@ -1246,14 +1247,14 @@ function queueCloudSave(){
     // karena snapshot lokal (bisa kosong/basi) akan MENGHAPUS data pusat.
     if(!firebaseToastShown){
       firebaseToastShown = true;
-      toast("⚠ Cloud belum terbaca — perubahan hanya tersimpan lokal. Muat ulang halaman saat koneksi pulih.");
+      toast("⚠ Cloud belum terbaca — perubahan tidak dikirim. Muat ulang halaman saat koneksi pulih.");
     }
     return;
   }
   clearTimeout(firebaseSyncTimer);
   firebaseSyncTimer = setTimeout(()=>pushCloudSnapshot(cloneData(db)), 600);
 }
-let bootLocalBackup = null; // salinan localStorage saat boot — sumber pemulihan data yang tertimpa
+let bootLocalBackup = null; // tidak dipakai; data bisnis tidak lagi dipulihkan dari localStorage
 async function load(){
   const localData = getLocalSnapshot();
   bootLocalBackup = localData;
@@ -1267,31 +1268,78 @@ async function load(){
     catch(e){
       cloudReadOk = false;
       firebaseState.status = "error";
-      firebaseState.message = "Gagal membaca data cloud. Mode hanya-baca lokal — penyimpanan ke cloud dinonaktifkan agar data pusat tidak tertimpa.";
+      firebaseState.message = "Gagal membaca data cloud. Mode kosong sementara — penyimpanan ke cloud dinonaktifkan agar data pusat tidak tertimpa.";
       console.warn("Firebase load gagal:", e);
       renderStorageNote();
     }
   }
-  if(localData && cloudData) db = getSnapshotStamp(cloudData) > getSnapshotStamp(localData) ? cloudData : localData;
-  else if(cloudData) db = cloudData;
-  else if(localData) db = localData;
+  if(cloudData) db = cloudData;
   else db = createDefaultDb();
 }
 function save(){
-  markDbSaved(firebaseApi ? "firebase+local" : "local");
-  if(storageOk){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){ toast("⚠ Gagal menyimpan — ekspor JSON untuk backup"); } }
+  markDbSaved(firebaseApi ? "firebase" : "memory-only");
+  if(storageOk){
+    try{ localStorage.removeItem(KEY); }catch(e){}
+  }
   queueCloudSave();
 }
-/* ---- PEMULIHAN DARI CADANGAN PERANGKAT ----
-   Setiap perangkat menyimpan salinan penuh di localStorage pada tiap save. Bila data
-   cloud kehilangan foto/temuan (tertimpa sesi berdata basi — bug yang sudah diperbaiki),
-   salinan perangkat pengunggah masih memilikinya. Saat aplikasi dibuka di perangkat itu,
-   yang hilang otomatis dikembalikan:
-   - FOTO: diisikan bila item cloud tidak punya (foto tak pernah bisa dihapus dari UI,
-     jadi cloud tanpa foto + cadangan berfoto = pasti korban timpa)
-   - TEMUAN: item yang ada di cadangan tapi hilang dari cloud dikembalikan, KECUALI
-     yang tercatat dihapus sengaja oleh Admin (db.meta.deletedIds) */
+let realtimeUnsubs = [];
+let realtimeRefreshTimer = null;
+let realtimeRefreshRunning = false;
+let realtimeRefreshPromise = null;
+async function refreshFromCloud(opts={}){
+  if(!firebaseApi || appStale) return false;
+  if(realtimeRefreshRunning) return realtimeRefreshPromise || false;
+  realtimeRefreshRunning = true;
+  realtimeRefreshPromise = (async ()=>{
+    try{
+    const cloudData = await loadFirestoreDb();
+    if(!cloudData) return false;
+    const userId = currentUser && currentUser.id;
+    db = cloudData;
+    cloudReadOk = true;
+    cloudShadow = buildShadow(db);
+    migrate();
+    if(userId){
+      const freshUser = (db.users||[]).find(u=>u.id===userId);
+      if(freshUser) currentUser = freshUser;
+    }
+    if(opts.render !== false){
+      applyAccess();
+      renderAll();
+      renderStorageNote();
+    }
+    return true;
+    }catch(e){
+    console.warn("Refresh Firestore gagal:", e);
+    return false;
+    }finally{
+    realtimeRefreshRunning = false;
+    realtimeRefreshPromise = null;
+    }
+  })();
+  return realtimeRefreshPromise;
+}
+function scheduleRealtimeRefresh(){
+  clearTimeout(realtimeRefreshTimer);
+  realtimeRefreshTimer = setTimeout(()=>refreshFromCloud({render:true}), 500);
+}
+function setupRealtimeSync(){
+  if(!firebaseApi || !firebaseApi.onSnapshot) return;
+  realtimeUnsubs.forEach(unsub=>{ try{ unsub(); }catch(e){} });
+  realtimeUnsubs = [];
+  const watch = ref=>{
+    try{
+      realtimeUnsubs.push(firebaseApi.onSnapshot(ref, scheduleRealtimeRefresh, err=>console.warn("Realtime Firestore gagal:", err)));
+    }catch(e){ console.warn("Realtime listener gagal:", e); }
+  };
+  watch(firebaseApi.rootRef);
+  FS_COLLECTIONS.forEach(([name])=>watch(firebaseApi.collection(firebaseApi.rootRef, name)));
+}
+/* Cadangan data bisnis di browser dimatikan. Fungsi ini disisakan no-op agar tab
+   lama tidak mengembalikan foto/temuan dari localStorage yang sudah basi. */
 function restoreFromLocalBackup(){
+  return;
   try{
     if(!firebaseApi || !cloudReadOk) return;           // hanya bila data aktif = data cloud
     const bak = bootLocalBackup;
@@ -1421,7 +1469,10 @@ function migrate(){
       console.info("[BSC] migrasi: "+rs.length+" record poin mentah dikonversi ke % (best "+best+")");
     });
   }
-  if(!db.meta.minAppVersion || db.meta.minAppVersion < APP_VERSION) db.meta.minAppVersion = APP_VERSION;
+  if(!db.meta.minAppVersion || db.meta.minAppVersion < APP_VERSION){
+    db.meta.minAppVersion = APP_VERSION;
+    setTimeout(()=>{ try{ save(); }catch(e){} }, 0);
+  }
   // Konektor LMS: pastikan adapter & endpoint terpasang (baseUrl resmi dari dokumentasi API)
   {
     const lms = db.integrations.find(c=>c.id==="lms");
@@ -2015,6 +2066,8 @@ let fotoPending = false;        // bukti: gagal unggah, menunggu migrasi
 let fotoTemuanPending = false;  // temuan: gagal unggah, menunggu migrasi
 let fotoPathNew = null;         // path objek GCS (mode signed)
 let fotoTemuanPathNew = null;
+let fotoChanged = false;
+let fotoTemuanChanged = false;
 /* ---- PENYIMPANAN FOTO: Google Cloud Storage (Firebase Storage) ----
    Aktif bila Admin mengaktifkannya di menu Data. Foto diunggah ke bucket dengan pola
    uploads/YYYY/MM/DD/uuid.ext dan disimpan sebagai URL (bukan base64) sehingga dokumen
@@ -2181,6 +2234,10 @@ function openModal(id){
   fotoTemuanData = it?(it.fotoTemuan||null):null;
   fotoPending = it?!!it.fotoPendingUpload:false;
   fotoTemuanPending = it?!!it.fotoTemuanPendingUpload:false;
+  fotoPathNew = it?(it.fotoPath||null):null;
+  fotoTemuanPathNew = it?(it.fotoTemuanPath||null):null;
+  fotoChanged = false;
+  fotoTemuanChanged = false;
   $("#mFoto").value = ""; $("#mFotoTemuan").value = "";
   const prev = $("#mFotoPrev");
   if(fotoData){ prev.src=fotoData; prev.style.display="block"; } else { prev.style.display="none"; }
@@ -2203,31 +2260,46 @@ function closeModal(){ $("#modalBack").classList.remove("open"); document.body.s
 
 $("#mFoto").addEventListener("change", e=>{
   const f = e.target.files[0]; if(!f) return;
+  fotoChanged = true;
   processPhoto(f, (data,st)=>{ fotoData=data; fotoPending=!!(st&&st.pending); fotoPathNew=(st&&st.path)||null; const p=$("#mFotoPrev"); p.src=data; p.style.display="block"; }, {kind:"bukti-perbaikan", itemId:editing||"baru", outlet:$("#mOutlet").value});
 });
 $("#mFotoTemuan").addEventListener("change", e=>{
   const f = e.target.files[0]; if(!f) return;
+  fotoTemuanChanged = true;
   processPhoto(f, (data,st)=>{ fotoTemuanData=data; fotoTemuanPending=!!(st&&st.pending); fotoTemuanPathNew=(st&&st.path)||null; const p=$("#mFotoTemuanPrev"); p.src=data; p.style.display="block"; }, {kind:"foto-temuan", itemId:editing||"baru", outlet:$("#mOutlet").value});
 });
 
-$("#btnSave").addEventListener("click", ()=>{
+$("#btnSave").addEventListener("click", async ()=>{
+  const btn = $("#btnSave");
+  const oldHtml = btn.innerHTML;
   const outlet = $("#mOutlet").value.trim();
   const temuan = $("#mTemuan").value.trim();
   if(!outlet || !temuan){ toast("⚠ Nama outlet dan temuan wajib diisi"); return; }
   if($("#mStatus").value==="verified" && !canVerify()){ toast("⚠ Status Terverifikasi hanya oleh QI & C / Admin"); return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Menyimpan…';
+  try{
+  if(firebaseApi && cloudReadOk){
+    await refreshFromCloud({render:false});
+  }
   const now = new Date().toISOString();
   const fixedOutlet = isOutlet()? currentUser.outlet : outlet;
+  const latest = editing ? db.items.find(x=>x.id===editing) : null;
   const vals = {
     outlet: fixedOutlet, temuan, ca:$("#mCA").value.trim(), pa:$("#mPA").value.trim(),
     divisi:$("#mDivisi").value, status:$("#mStatus").value,
     pic:$("#mPic").value.trim(), vendor:$("#mVendor").value.trim(),
     timeline:$("#mTimeline").value, progres:$("#mProgres").value.trim(),
-    bukti:$("#mBukti").value.trim(), foto:fotoData, fotoTemuan:fotoTemuanData,
+    bukti:$("#mBukti").value.trim(),
+    foto:(editing && !fotoChanged && latest) ? latest.foto : fotoData,
+    fotoTemuan:(editing && !fotoTemuanChanged && latest) ? latest.fotoTemuan : fotoTemuanData,
     fotoPendingUpload: fotoPending||undefined, fotoTemuanPendingUpload: fotoTemuanPending||undefined,
-    fotoPath: fotoPathNew||undefined, fotoTemuanPath: fotoTemuanPathNew||undefined
+    fotoPath:(editing && !fotoChanged && latest) ? latest.fotoPath : (fotoPathNew||undefined),
+    fotoTemuanPath:(editing && !fotoTemuanChanged && latest) ? latest.fotoTemuanPath : (fotoTemuanPathNew||undefined)
   };
   if(editing){
     const it = db.items.find(x=>x.id===editing);
+    if(!it){ toast("⚠ Temuan ini sudah tidak ada di Firestore. Muat ulang halaman."); return; }
     const changes=[];
     if(it.status!==vals.status) changes.push("status → "+STATUS[vals.status].label);
     if(it.divisi!==vals.divisi) changes.push("tim → "+DIVISI[vals.divisi].name);
@@ -2243,6 +2315,10 @@ $("#btnSave").addEventListener("click", ()=>{
     toast("✓ Temuan baru ditambahkan");
   }
   save(); closeModal(); renderAll();
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = oldHtml;
+  }
 });
 
 $("#btnDelete").addEventListener("click", ()=>{
@@ -3797,11 +3873,12 @@ function renderAll(){
   await initFirebase();
   await load();
   migrate();
-  restoreFromLocalBackup(); // pulihkan foto/temuan yang tertimpa sesi lain, dari cadangan perangkat ini
+  restoreFromLocalBackup(); // no-op: data bisnis tidak lagi dipulihkan dari localStorage
   loadSession();
   applyAccess();
   renderAll();
   enhanceAllSelects();
+  setupRealtimeSync();
   renderStorageNote();
   if(db.meta && db.meta.appCheckSiteKey && !localStorage.getItem("tf_appcheck_key")){
     localStorage.setItem("tf_appcheck_key", db.meta.appCheckSiteKey); // perangkat baru ikut otomatis (aktif saat muat berikutnya)
