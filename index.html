@@ -599,7 +599,7 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
   <div class="card" style="overflow:auto">
     <table class="tbl" id="msTable">
       <thead><tr>
-        <th>Tanggal</th><th>Outlet</th><th>Skenario</th><th style="width:70px">Skor</th><th>InsanKU</th><th>Gap Terbesar</th><th style="width:120px">Bukti</th>
+        <th>Tanggal</th><th>Outlet</th><th>Skenario</th><th style="width:70px">Skor</th><th>InsanKU</th><th>Gap Terbesar</th><th style="width:120px">Bukti</th><th style="width:86px"></th>
       </tr></thead>
       <tbody id="msBody"></tbody>
     </table>
@@ -802,7 +802,9 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
 <!-- Modal Detail Mystery Shopper -->
 <div class="modal-back" id="msBack">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:920px">
-    <div class="modal-head"><h3 id="msTitle">Kunjungan Mystery Shopper</h3><button class="x-btn" id="msClose" aria-label="Tutup">×</button></div>
+    <div class="modal-head"><h3 id="msTitle">Kunjungan Mystery Shopper</h3>
+      <button class="btn btn-ghost" id="msPrint" style="margin-left:auto;margin-right:8px">🖨 Cetak / PDF</button>
+      <button class="x-btn" id="msClose" aria-label="Tutup">×</button></div>
     <div class="modal-body" style="display:block" id="msDetailBody"></div>
   </div>
 </div>
@@ -2930,7 +2932,10 @@ function renderMystery(){
   const scored = list.filter(v=>v.score!==null&&v.score!==undefined);
   const avg = scored.length? Math.round(scored.reduce((a,v)=>a+v.score,0)/scored.length*10)/10 : null;
   $("#msSummary").textContent = list.length+" kunjungan"+(avg!==null? " · rata-rata skor "+avg : "");
-  $("#cntMs").textContent = db.msVisits.length;
+  const scopeCount = isShopper()? db.msVisits.filter(v=>v.email===(currentUser.user||currentUser.name)).length
+                   : isOutlet()? db.msVisits.filter(v=>v.outlet===currentUser.outlet).length
+                   : db.msVisits.length;
+  $("#cntMs").textContent = scopeCount;
 
   body.innerHTML = list.length? list.map(v=>`
     <tr data-id="${v.id}" style="cursor:pointer">
@@ -2940,13 +2945,14 @@ function renderMystery(){
       <td>${msScoreChip(v.score)}</td>
       <td>${esc(v.insanku||"—")}</td>
       <td style="max-width:260px">${esc((v.gap||"—").slice(0,90))}${(v.gap||"").length>90?"…":""}</td>
-      <td>${v.fotoUrl?'<a href="'+esc(v.fotoUrl)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">🧾 Struk</a>':""}
-          ${v.videos&&v.videos.length? ' <span class="chip chip-blue">🎥 '+v.videos.length+'</span>':""}</td>
-    </tr>`).join("") : '<tr><td colspan="7" class="empty">Belum ada kunjungan. Sinkronkan konektor Mystery Shopper di Review Rutin.</td></tr>';
+      <td>${v.fotoUrl?(String(v.fotoUrl).startsWith("data:")?'🧾':'<a href="'+esc(v.fotoUrl)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">🧾 Struk</a>')+' ':""}${v.videos&&v.videos.length? '<span class="chip chip-blue">🎥 '+v.videos.length+'</span>':""}</td>
+      <td><button class="mini-act">🔎 Detail</button></td>
+    </tr>`).join("") : '<tr><td colspan="8" class="empty">Belum ada kunjungan. Tekan ＋ Input Kunjungan untuk mulai menilai.</td></tr>';
   $$("#msBody tr[data-id]").forEach(tr=>tr.addEventListener("click", ()=>openMsDetail(tr.dataset.id)));
 }
 function openMsDetail(id){
   const v = db.msVisits.find(x=>x.id===id); if(!v) return;
+  msDetailCurrent = v;
   $("#msTitle").textContent = "Mystery Shopper — "+shortOutletName(v.outlet)+" · "+fmtDate(v.tanggal);
   const rows = (v.detail||[]).map((d,i)=>`
     <tr><td style="width:34px">${i+1}</td><td>${esc(d.label)}</td><td>${esc(d.answer)}</td>
@@ -2975,6 +2981,34 @@ function openMsDetail(id){
     ${vids}`;
   $("#msBack").classList.add("open");
 }
+let msDetailCurrent = null;
+$("#msPrint") && $("#msPrint").addEventListener("click", ()=>{
+  const v = msDetailCurrent; if(!v) return;
+  const rows = (v.detail||[]).map((d,i)=>`<tr><td>${i+1}</td><td>${esc(d.label)}</td><td>${esc(d.answer)}</td><td style="text-align:center">${d.score===null?"—":d.score}</td><td>${esc((v.alasan||[])[i]||"")}</td></tr>`).join("");
+  const vids = (v.videos||[]).map(f=>`<li>${esc(f.name)} — ${esc(f.url)}</li>`).join("");
+  const win = window.open("", "_blank");
+  if(!win){ toast("⚠ Pop-up diblokir browser — izinkan pop-up untuk mencetak"); return; }
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Mystery Shopper — ${esc(shortOutletName(v.outlet))}</title>
+  <style>body{font-family:Georgia,serif;max-width:760px;margin:24px auto;color:#1c1c1c;font-size:13px}
+  h1{font-size:19px;margin:0}h2{font-size:14px;margin:20px 0 6px;border-bottom:1px solid #ccc;padding-bottom:3px}
+  table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #bbb;padding:6px 8px;text-align:left;vertical-align:top}
+  th{background:#f3e9e9}img{max-width:300px;border:1px solid #ccc;border-radius:6px}.meta{color:#555;font-size:12px}
+  .score{font-size:22px;font-weight:bold}.box{border:1px solid #bbb;border-radius:8px;padding:10px 12px;margin-top:8px}</style></head><body>
+  <h1>Penilaian Mystery Shopper — ${esc(shortOutletName(v.outlet))}</h1>
+  <div class="meta">${esc(v.outlet)} · ${fmtDate(v.tanggal)}${v.waktu?" "+esc(v.waktu):""} · ${esc(v.skenario||"Skenario —")}<br>
+  Penilai: ${esc(v.email||"—")} · InsanKU berjaga: ${esc(v.insanku||"—")}</div>
+  <p class="score">Skor: ${v.score===null?"—":fmtVal(v.score,"")} <span style="font-size:13px;font-weight:normal">/ target ${(PARAMS.find(p=>p.id==="mystery_score")||{}).target||85}</span></p>
+  <h2>Penilaian per Butir</h2>
+  <table><thead><tr><th>#</th><th>Butir</th><th>Jawaban</th><th>Skor</th><th>Alasan singkat</th></tr></thead><tbody>${rows}</tbody></table>
+  <h2>&#128077; Perlu diapresiasi</h2><div class="box">${esc(v.apresiasi||"—")}</div>
+  <h2>&#9888; Gap terbesar</h2><div class="box">${esc(v.gap||"—")}</div>
+  ${v.coaching? '<h2>&#127891; Hasil Coaching</h2><div class="box">'+esc(v.coaching)+'</div>':""}
+  ${v.fotoUrl? '<h2>&#129534; Foto struk</h2>'+(String(v.fotoUrl).startsWith("data:")?'<img src="'+v.fotoUrl+'">':'<p>'+esc(v.fotoUrl)+'</p>'):""}
+  ${vids? '<h2>&#127909; Video</h2><ul>'+vids+'</ul>':""}
+  <p class="meta" style="margin-top:26px">Dicetak dari Task Force OSE Command Center · ${new Date().toLocaleString("id-ID")}</p>
+  <script>window.onload=()=>setTimeout(()=>window.print(),300);<\/script></body></html>`);
+  win.document.close();
+});
 $("#msClose") && $("#msClose").addEventListener("click", ()=>$("#msBack").classList.remove("open"));
 $("#msBack") && $("#msBack").addEventListener("click", e=>{ if(e.target===e.currentTarget) $("#msBack").classList.remove("open"); });
 $("#msOutlet") && $("#msOutlet").addEventListener("change", renderMystery);
@@ -4314,7 +4348,10 @@ function fillOutletSelectors(){
 function renderAll(){
   fillOutletSelectors();
   $("#cntTemuan").textContent = visibleItems().length;
-  if($("#cntMs")) $("#cntMs").textContent = (db.msVisits||[]).length;
+  if($("#cntMs")) $("#cntMs").textContent = !currentUser? (db.msVisits||[]).length
+    : isShopper()? (db.msVisits||[]).filter(v=>v.email===(currentUser.user||currentUser.name)).length
+    : isOutlet()? (db.msVisits||[]).filter(v=>v.outlet===currentUser.outlet).length
+    : (db.msVisits||[]).length;
   const curK = $("#fKpiHist").value;
   $("#fKpiHist").innerHTML = '<option value="">Semua KPI</option>'+KPIS.map(k=>`<option value="${k.id}" ${k.id===curK?"selected":""}>${esc(k.name)}</option>`).join("");
   ssRefresh("fKpiHist");
