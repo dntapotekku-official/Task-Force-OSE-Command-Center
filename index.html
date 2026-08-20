@@ -593,6 +593,7 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
   <div class="toolbar">
     <select id="msOutlet"><option value="">Semua Outlet</option></select>
     <select id="msBulanF"><option value="all">Semua Bulan</option></select>
+    <button class="btn btn-primary" id="btnMsAdd">＋ Input Kunjungan</button>
     <span class="muted" id="msSummary" style="font-size:12.5px;margin-left:auto"></span>
   </div>
   <div class="card" style="overflow:auto">
@@ -760,6 +761,44 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
   </div>
 </div>
 
+<!-- Modal Input Mystery Shopper -->
+<div class="modal-back" id="msFormBack">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:860px">
+    <div class="modal-head"><h3>Input Kunjungan Mystery Shopper</h3><button class="x-btn" id="msFormClose" aria-label="Tutup">×</button></div>
+    <div class="modal-body" style="display:block">
+      <div class="grid2">
+        <div class="field"><label>Nama Apotek *</label><select id="msfOutlet"><option value="">— pilih outlet —</option></select></div>
+        <div class="field"><label>Skenario kunjungan</label>
+          <select id="msfSkenario">
+            <option value="">— pilih skenario —</option>
+            <option>Membeli obat (contoh obat bodrex dibawa)</option>
+            <option>Bertanya rekomendasi obat (untuk sakit kepala)</option>
+            <option>Bertanya vitamin (untuk sehari-hari karena banyak kegiatan)</option>
+            <option>Konsultasi ringan terkait dengan memiliki riwayat kolestrol tinggi</option>
+          </select></div>
+        <div class="field"><label>Tanggal Kunjungan *</label><input type="date" id="msfTanggal"></div>
+        <div class="field"><label>Waktu Kunjungan</label><input type="time" id="msfWaktu"></div>
+      </div>
+      <div id="msfItems" style="margin-top:6px"></div>
+      <div class="grid2" style="margin-top:6px">
+        <div class="field full"><label>Satu hal yang perlu diapresiasi dari outlet ini *</label><textarea id="msfApresiasi" rows="2"></textarea></div>
+        <div class="field full"><label>Satu hal yang menjadi Gap terbesar, dan masih bisa untuk diperbaiki *</label><textarea id="msfGap" rows="2"></textarea></div>
+        <div class="field"><label>Nama InsanKU yang berjaga *</label><input id="msfInsanku"></div>
+        <div class="field"><label>Foto struk belanja</label>
+          <input type="file" id="msfFoto" accept="image/*">
+          <img id="msfFotoPrev" style="display:none;max-width:140px;border-radius:8px;margin-top:6px">
+        </div>
+        <div class="field full"><label>Link video kunjungan (Drive, opsional — pisahkan koma bila lebih dari satu)</label><input id="msfVideo" placeholder="https://drive.google.com/file/d/..."></div>
+        <div class="field full"><label>Hasil Coaching</label><textarea id="msfCoaching" rows="2"></textarea></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
+        <div id="msfScorePrev" class="chip chip-gray" style="font-size:14px;padding:8px 14px">Skor: —</div>
+        <button class="btn btn-primary" id="btnMsSave" style="margin-left:auto">💾 Simpan Kunjungan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Modal Detail Mystery Shopper -->
 <div class="modal-back" id="msBack">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:920px">
@@ -878,6 +917,7 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
           <option value="admin">Admin / Manager Task Force</option>
           <option value="ssc">SSC — Divisi Task Force</option>
           <option value="outlet">Outlet</option>
+          <option value="shopper">Mystery Shopper (khusus input penilaian)</option>
         </select>
       </div>
       <div class="field" id="umDivisiWrap"><label>Divisi (untuk SSC)</label>
@@ -1584,14 +1624,17 @@ function setMonthFilter(v){
   applyFilters(); renderDashboard(); renderReport();
   const b=$("#cntTemuan"); if(b) b.textContent = visibleItems().length;
 }
+function isShopper(){ return currentUser && currentUser.role==="shopper"; }
 function roleLabel(u){
   if(u.role==="admin") return "Admin";
   if(u.role==="ssc") return "SSC · "+(u.divisi==="QIC"?"QI & C":u.divisi);
+  if(u.role==="shopper") return "Mystery Shopper";
   return "Outlet";
 }
 function scopeLabel(u){
   if(u.role==="admin") return "Seluruh sistem + kelola akun";
   if(u.role==="ssc") return "Seluruh sistem — "+DIVISI[u.divisi].name;
+  if(u.role==="shopper") return "Input penilaian Mystery Shopper";
   return u.outlet||"—";
 }
 
@@ -1748,7 +1791,7 @@ function enhanceAllSelects(){
    ["rvTeam","Cari tim…"],["rvFindRisk",""],["mDivisi","Cari tim…"],["mStatus",""],
    ["umRole",""],["umDivisi","Cari divisi…"],["kmId","Cari KPI…"],["cnAuth",""],["cnFreq",""],
    ["fBulan","Cari bulan…"],["dashBulan","Cari bulan…"],["rcBulan","Cari bulan…"],
-   ["msOutlet","Cari outlet…"],["msBulanF","Cari bulan…"]
+   ["msOutlet","Cari outlet…"],["msBulanF","Cari bulan…"],["msfOutlet","Cari outlet…"],["msfSkenario",""]
   ].forEach(([id,ph])=>{ const el=$("#"+id); if(el) enhanceSelect(el,{placeholder:ph||"Ketik untuk mencari…"}); });
 }
 
@@ -2857,7 +2900,9 @@ function bscNormalize(row, period, bestPoints){
 }
 /* ---- MYSTERY SHOPPER: tampilan ---- */
 function visibleMsVisits(){
-  let list = isOutlet() ? db.msVisits.filter(v=>v.outlet===currentUser.outlet) : db.msVisits.slice();
+  let list = isOutlet() ? db.msVisits.filter(v=>v.outlet===currentUser.outlet)
+           : isShopper() ? db.msVisits.filter(v=>v.email===(currentUser.user||currentUser.name))
+           : db.msVisits.slice();
   const mf = $("#msBulanF") ? $("#msBulanF").value : "all";
   if(mf && mf!=="all") list = list.filter(v=>(v.tanggal||"").slice(0,7)===mf);
   const of = $("#msOutlet") ? $("#msOutlet").value : "";
@@ -2923,7 +2968,10 @@ function openMsDetail(id){
       <div class="card" style="border-left:4px solid var(--red)"><b>⚠ Gap terbesar</b><p style="margin:6px 0 0;font-size:13px">${esc(v.gap||"—")}</p></div>
     </div>
     ${v.coaching? '<div class="card" style="margin-top:12px;border-left:4px solid var(--brand)"><b>🎓 Hasil Coaching</b><p style="margin:6px 0 0;font-size:13px">'+esc(v.coaching)+'</p></div>':""}
-    ${v.fotoUrl? '<p style="margin-top:12px"><a class="btn btn-ghost" href="'+esc(v.fotoUrl)+'" target="_blank" rel="noopener">🧾 Lihat foto struk</a></p>':""}
+    ${v.fotoUrl? (String(v.fotoUrl).startsWith("data:")
+        ? '<div style="margin-top:12px"><b style="font-size:13px">🧾 Foto struk</b><br><img src="'+v.fotoUrl+'" style="max-width:320px;border-radius:10px;border:1px solid var(--line);margin-top:6px">'
+        : '<p style="margin-top:12px"><a class="btn btn-ghost" href="'+esc(v.fotoUrl)+'" target="_blank" rel="noopener">🧾 Lihat foto struk</a></p>') : ""}
+    ${isAdmin()? '<p style="margin-top:14px"><button class="btn btn-ghost" style="color:var(--red)" onclick="deleteMsVisit(\''+v.id+'\')">🗑 Hapus kunjungan</button></p>':""}
     ${vids}`;
   $("#msBack").classList.add("open");
 }
@@ -2931,6 +2979,137 @@ $("#msClose") && $("#msClose").addEventListener("click", ()=>$("#msBack").classL
 $("#msBack") && $("#msBack").addEventListener("click", e=>{ if(e.target===e.currentTarget) $("#msBack").classList.remove("open"); });
 $("#msOutlet") && $("#msOutlet").addEventListener("change", renderMystery);
 $("#msBulanF") && $("#msBulanF").addEventListener("change", renderMystery);
+
+/* ---- MYSTERY SHOPPER: input langsung di Command Center ---- */
+const MS_OPTIONS = {
+  q1:["Terlihat nyaman dan bersih","Biasa saja","Kurang menarik dan kotor"],
+  q2:["Ada","Tidak"],
+  q3:["Ya, terasa smile voice","Hanya formalitas","Kurang ramah"],
+  q4:["Cepat dan tepat","Cukup/biasa saja","Lama dan kurang diperhatikan"],
+  q5:["Ya sangat terbantu dan jelas","Tidak terbantu"],
+  q6:["Ya","Tidak"],
+  q7:["Ya","Tidak"],
+  q8:["Ya","Ragu-ragu","Tidak"]
+};
+const MS_QUESTION = {
+  q1:"Saat pertama kali datang, kesan SSA mengenai apotek",
+  q2:"Apakah ada greeting yang dilakukan ?",
+  q3:"Seberapa hangat greeting yang dirasakan ?",
+  q4:"Kesan pertama saat dilayani oleh InsanKU",
+  q5:"Apakah SSA merasa terbantu dengan rekomendasi oleh InsanKU",
+  q6:"Apakah InsanKU menawarkan alternatif/produk pelengkap secara wajar (bukan memaksa)",
+  q7:"Apakah ada greeting penutup ?",
+  q8:"Setelah dilayani, apakah SSA merasa percaya untuk kembali ke outlet ini ?"
+};
+let msFotoData = null;
+function driveToPreview(url){
+  const u = String(url||"").trim(); if(!u) return "";
+  let m = /\/file\/d\/([\w-]+)/.exec(u) || /[?&]id=([\w-]+)/.exec(u);
+  return m ? "https://drive.google.com/file/d/"+m[1]+"/preview" : u;
+}
+function msfCollectAnswers(){
+  const ans = {};
+  MS_ITEMS.forEach(it=>{
+    const sel = document.querySelector('input[name="msf_'+it.key+'"]:checked');
+    ans[it.key] = sel ? sel.value : "";
+  });
+  return ans;
+}
+function msfUpdateScore(){
+  const {score} = msVisitScore(msfCollectAnswers());
+  const el = $("#msfScorePrev");
+  if(score===null){ el.className="chip chip-gray"; el.style.cssText="font-size:14px;padding:8px 14px"; el.textContent="Skor: — (lengkapi 8 butir)"; return; }
+  const t = (PARAMS.find(p=>p.id==="mystery_score")||{}).target||85;
+  el.className = "chip "+(score>=t?"chip-green":(score>=t*0.8?"chip-amber":"chip-red"));
+  el.style.cssText="font-size:14px;padding:8px 14px";
+  el.textContent = "Skor: "+fmtVal(score,"")+" / target "+t;
+}
+function openMsForm(){
+  if(isOutlet()){ toast("⚠ Akun outlet tidak dapat menginput penilaian"); return; }
+  // outlet options
+  const sel = $("#msfOutlet");
+  sel.innerHTML = '<option value="">— pilih outlet —</option>'+OUTLETS.map(o=>`<option>${esc(o.name)}</option>`).join("");
+  if(typeof ssRefresh==="function") ssRefresh("msfOutlet");
+  // butir penilaian + alasan per butir
+  $("#msfItems").innerHTML = MS_ITEMS.map((it,i)=>`
+    <div class="card" style="margin-bottom:8px;padding:12px 14px">
+      <b style="font-size:13px">${i+1}. ${esc(MS_QUESTION[it.key])} *</b>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px">
+        ${MS_OPTIONS[it.key].map(op=>`
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+            <input type="radio" name="msf_${it.key}" value="${esc(op)}"> ${esc(op)}
+          </label>`).join("")}
+      </div>
+      <input id="msfAlasan_${it.key}" placeholder="Alasan singkat…" style="margin-top:8px;font-size:12.5px">
+    </div>`).join("");
+  $$('#msfItems input[type="radio"]').forEach(r=>r.addEventListener("change", msfUpdateScore));
+  $("#msfTanggal").value = todayStr();
+  $("#msfWaktu").value = ""; $("#msfSkenario").value = "";
+  ["msfApresiasi","msfGap","msfInsanku","msfVideo","msfCoaching"].forEach(id=>$("#"+id).value="");
+  msFotoData = null; $("#msfFotoPrev").style.display="none"; $("#msfFoto").value="";
+  msfUpdateScore();
+  $("#msFormBack").classList.add("open");
+}
+async function saveMsForm(){
+  const outlet = $("#msfOutlet").value;
+  const tanggal = $("#msfTanggal").value;
+  const ans = msfCollectAnswers();
+  const missing = MS_ITEMS.filter(it=>!ans[it.key]);
+  if(!outlet) return toast("⚠ Pilih outlet");
+  if(!tanggal) return toast("⚠ Isi tanggal kunjungan");
+  if(missing.length) return toast("⚠ Lengkapi butir: "+missing.map((m,)=>MS_ITEMS.indexOf(m)+1).join(", "));
+  if(!$("#msfApresiasi").value.trim()) return toast("⚠ Isi hal yang perlu diapresiasi");
+  if(!$("#msfGap").value.trim()) return toast("⚠ Isi Gap terbesar");
+  if(!$("#msfInsanku").value.trim()) return toast("⚠ Isi nama InsanKU yang berjaga");
+  const sc = msVisitScore(ans);
+  const videos = $("#msfVideo").value.split(",").map(v=>v.trim()).filter(Boolean)
+    .map((u,i)=>({name:"Video "+(i+1), url:driveToPreview(u)}));
+  const id = "msi-"+Date.now();
+  const alasan = MS_ITEMS.map(it=>$("#msfAlasan_"+it.key).value.trim());
+  const v = { id, row:null, submittedAt:new Date().toISOString(),
+    email:(currentUser&&(currentUser.user||currentUser.name))||"", source:"input-langsung",
+    outlet, outletAsli:outlet, tanggal, waktu:$("#msfWaktu").value, skenario:$("#msfSkenario").value,
+    q1:ans.q1,q2:ans.q2,q3:ans.q3,q4:ans.q4,q5:ans.q5,q6:ans.q6,q7:ans.q7,q8:ans.q8,
+    score:sc.score, detail:sc.detail, alasan,
+    apresiasi:$("#msfApresiasi").value.trim(), gap:$("#msfGap").value.trim(),
+    fotoUrl: msFotoData||"", insanku:$("#msfInsanku").value.trim(),
+    coaching:$("#msfCoaching").value.trim(), videos, updatedAt:new Date().toISOString() };
+  db.msVisits.push(v);
+  const msTarget = (PARAMS.find(p=>p.id==="mystery_score")||{}).target||85;
+  upsertNormalized([{
+    source_system:"mystery_gform", source_record_id:id,
+    team:"QIC", team_source:"quality_improvement",
+    outlet_id:outlet, review_date:tanggal, parameter:"mystery_score",
+    score:sc.score, target:msTarget,
+    status: sc.score===null? "no_data" : normStatus(sc.score, msTarget, "up"),
+    finding: sc.score!==null && sc.score<msTarget ? "Mystery Shopper "+fmtVal(sc.score,"")+" — Gap: "+v.gap : "",
+    evidence_url: /^https?:/.test(v.fotoUrl)? v.fotoUrl : "",
+    is_repeated:false, period:tanggal.slice(0,7), created_at:new Date().toISOString()
+  }], "mystery");
+  const cfg = connCfg("mystery"); if(cfg){ cfg.count = db.msVisits.length; if(cfg.status==="not_integrated") cfg.status="connected"; cfg.lastSync=new Date().toISOString(); }
+  save();
+  $("#msFormBack").classList.remove("open");
+  renderMystery();
+  toast("✓ Kunjungan tersimpan — skor "+(sc.score===null?"—":fmtVal(sc.score,"")));
+}
+function deleteMsVisit(id){
+  if(!isAdmin()){ toast("⚠ Hanya Admin yang dapat menghapus"); return; }
+  if(!confirm("Hapus kunjungan ini beserta record Review Rutin-nya?")) return;
+  db.msVisits = db.msVisits.filter(v=>v.id!==id);
+  db.reviewData = db.reviewData.filter(r=>!(r.source_system==="mystery_gform" && r.source_record_id===id));
+  const cfg = connCfg("mystery"); if(cfg) cfg.count = db.msVisits.length;
+  save(); $("#msBack").classList.remove("open"); renderMystery();
+  toast("Kunjungan dihapus");
+}
+$("#btnMsAdd") && $("#btnMsAdd").addEventListener("click", openMsForm);
+$("#msFormClose") && $("#msFormClose").addEventListener("click", ()=>$("#msFormBack").classList.remove("open"));
+$("#msFormBack") && $("#msFormBack").addEventListener("click", e=>{ if(e.target===e.currentTarget) $("#msFormBack").classList.remove("open"); });
+$("#btnMsSave") && $("#btnMsSave").addEventListener("click", saveMsForm);
+$("#msfFoto") && $("#msfFoto").addEventListener("change", e=>{
+  const f=e.target.files[0]; if(!f) return;
+  processPhoto(f, (data)=>{ msFotoData=data; const p=$("#msfFotoPrev"); p.src=data; p.style.display="block"; },
+    {kind:"struk-mystery", itemId:"ms", outlet:$("#msfOutlet").value||"outlet"});
+});
 
 /* ---- MYSTERY SHOPPER: skoring & adapter ----
    Skor kunjungan = rata-rata 8 butir (bobot per butir bisa diubah pada MS_ITEMS: w).
@@ -3236,7 +3415,7 @@ function autoSyncDue(){
 }
 async function autoSync(){
   if(autoSyncRunning) return;
-  if(!currentUser || isOutlet()) return;      // hanya admin/SSC
+  if(!currentUser || isOutlet() || isShopper()) return; // hanya admin/SSC
   if(firebaseApi && !cloudReadOk) return;     // cloud belum terbaca → jangan menulis
   const due = autoSyncDue();
   refreshInternalData();
@@ -3948,8 +4127,9 @@ $("#loginUser").addEventListener("keydown", e=>{ if(e.key==="Enter") $("#loginPi
 $("#btnLogout").addEventListener("click", ()=>{
   currentUser=null; saveSession(); applyAccess(); showLogin();
 });
-function firstView(){ return "dashboard"; }
+function firstView(){ return isShopper() ? "mystery" : "dashboard"; }
 const OUTLET_HIDDEN_TABS = ["prioritas","review","kpi","laporan","data"];
+const SHOPPER_ALLOWED_TABS = ["mystery"];
 function applyAccess(){
   const logged = !!currentUser;
   $("#userChip").style.display = logged? "flex":"none";
@@ -3957,9 +4137,11 @@ function applyAccess(){
   // tab visibility
   $$(".tab-btn").forEach(b=>{
     const v = b.dataset.view;
-    b.style.display = (logged && isOutlet() && OUTLET_HIDDEN_TABS.includes(v)) ? "none" : "";
+    b.style.display = (logged && isOutlet() && OUTLET_HIDDEN_TABS.includes(v)) ? "none"
+      : (logged && isShopper() && !SHOPPER_ALLOWED_TABS.includes(v)) ? "none" : "";
   });
   // filter outlet terkunci utk akun outlet
+  if($("#btnMsAdd")) $("#btnMsAdd").style.display = (logged && !isOutlet()) ? "" : "none";
   const fo = $("#fOutlet");
   fo.disabled = isOutlet();
   if(isOutlet()){ fo.value = currentUser.outlet; }
@@ -4081,6 +4263,7 @@ $("#btnMenu").addEventListener("click", ()=>{ $("#sidebar").classList.add("open"
 $("#sideBackdrop").addEventListener("click", closeSidebar);
 function switchView(name){
   if(isOutlet() && OUTLET_HIDDEN_TABS.includes(name)) name = "dashboard";
+  if(isShopper() && !SHOPPER_ALLOWED_TABS.includes(name)) name = "mystery";
   closeSidebar();
   $$(".tab-btn").forEach(b=>b.classList.toggle("active", b.dataset.view===name));
   $$(".view").forEach(v=>v.classList.toggle("active", v.id==="view-"+name));
