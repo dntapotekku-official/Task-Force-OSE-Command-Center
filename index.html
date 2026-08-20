@@ -399,6 +399,7 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
     <button class="tab-btn" data-view="temuan">📋 Temuan &amp; CAPA <span class="count" id="cntTemuan">0</span></button>
     <button class="tab-btn" data-view="prioritas">🚨 Outlet Prioritas <span class="count" id="cntPrio">0</span></button>
     <button class="tab-btn" data-view="review">🔁 Review Rutin <span class="count" id="cntAct">0</span></button>
+    <button class="tab-btn" data-view="mystery">🕵️ Mystery Shopper <span class="count" id="cntMs">0</span></button>
     <button class="tab-btn" data-view="kpi">🎯 KPI Team <span class="count" id="cntKpi">0</span></button>
     <button class="tab-btn" data-view="laporan">📄 Laporan CEO</button>
     <button class="tab-btn" data-view="data">⚙️ Data</button>
@@ -588,6 +589,22 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
 </section>
 
 <!-- ================= KPI ================= -->
+<section class="view" id="view-mystery">
+  <div class="toolbar">
+    <select id="msOutlet"><option value="">Semua Outlet</option></select>
+    <select id="msBulanF"><option value="all">Semua Bulan</option></select>
+    <span class="muted" id="msSummary" style="font-size:12.5px;margin-left:auto"></span>
+  </div>
+  <div class="card" style="overflow:auto">
+    <table class="tbl" id="msTable">
+      <thead><tr>
+        <th>Tanggal</th><th>Outlet</th><th>Skenario</th><th style="width:70px">Skor</th><th>InsanKU</th><th>Gap Terbesar</th><th style="width:120px">Bukti</th>
+      </tr></thead>
+      <tbody id="msBody"></tbody>
+    </table>
+  </div>
+</section>
+
 <section class="view" id="view-kpi">
   <div class="toolbar">
     <button class="btn btn-primary" id="btnKpiAdd">＋ Input Nilai KPI</button>
@@ -740,6 +757,14 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
         <button class="btn btn-primary" id="btnSave">Simpan Perubahan</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Modal Detail Mystery Shopper -->
+<div class="modal-back" id="msBack">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:920px">
+    <div class="modal-head"><h3 id="msTitle">Kunjungan Mystery Shopper</h3><button class="x-btn" id="msClose" aria-label="Tutup">×</button></div>
+    <div class="modal-body" style="display:block" id="msDetailBody"></div>
   </div>
 </div>
 
@@ -1013,7 +1038,8 @@ const FS_COLLECTIONS = [
   ["acts",       d=>toActsArray(d.acts||{}),        r=>r.id],
   ["kpiEntries", d=>((d.kpi||{}).entries)||[],      r=>r.k||r.id],
   ["reviewData", d=>(d.reviewData||[]).map(r=>({ id:(r.source_system+"__"+r.source_record_id).replace(/[\/#?\[\]*]/g,"_"), ...r })), r=>r.id],
-  ["integrations", d=>d.integrations||[],           r=>r.id]
+  ["integrations", d=>d.integrations||[],           r=>r.id],
+  ["msVisits",   d=>d.msVisits||[],                 r=>r.id]
 ];
 function createDefaultDb(){
   // Tidak ada data hardcode: mulai kosong; data sesungguhnya dimuat dari Firestore
@@ -1148,7 +1174,7 @@ async function loadFirestoreDb(){
   const rootSnap = await firebaseApi.getDoc(firebaseApi.rootRef);
   if(!rootSnap.exists()) return null;
   const root = rootSnap.data() || {};
-  const [items, audits, users, actsRows, kpiEntries, reviewRows, integRows] = await Promise.all(
+  const [items, audits, users, actsRows, kpiEntries, reviewRows, integRows, msRows] = await Promise.all(
     FS_COLLECTIONS.map(([name])=>fetchSubcollectionDocs(name))
   );
   return {
@@ -1159,7 +1185,8 @@ async function loadFirestoreDb(){
     acts: fromActsArray(actsRows),
     kpi: { targets: cloneData(root.kpiTargets || {}), entries: kpiEntries.map(cloneData) },
     reviewData: reviewRows.map(row=>{ const c=cloneData(row); delete c.id; return c; }),
-    integrations: integRows.map(cloneData)
+    integrations: integRows.map(cloneData),
+    msVisits: msRows.map(cloneData)
   };
 }
 async function syncSubcollection(name, rows){
@@ -1480,6 +1507,13 @@ function migrate(){
     db.meta.minAppVersion = APP_VERSION;
     setTimeout(()=>{ try{ save(); }catch(e){} }, 0);
   }
+  if(!Array.isArray(db.msVisits)) db.msVisits = [];
+  if(!db.integrations.find(c=>c.id==="mystery")){
+    db.integrations.push({ id:"mystery", name:"Mystery Shopper (Google Form)", team:"QIC", internal:false,
+      baseUrl:"", authType:"api_key", headerName:"token", keyEnv:"TOKEN (di Apps Script)",
+      adapter:"mystery_gform", syncFreq:"harian", mapping:"", lastSync:null,
+      status:"not_integrated", count:0, viaCsv:false, endpoints:{} });
+  }
   // Konektor LMS: pastikan adapter & endpoint terpasang (baseUrl resmi dari dokumentasi API)
   {
     const lms = db.integrations.find(c=>c.id==="lms");
@@ -1713,7 +1747,8 @@ function enhanceAllSelects(){
    ["fDivisi","Cari tim…"],["fStatus","Cari status…"],["fSort",""],["fKpiHist","Cari KPI…"],
    ["rvTeam","Cari tim…"],["rvFindRisk",""],["mDivisi","Cari tim…"],["mStatus",""],
    ["umRole",""],["umDivisi","Cari divisi…"],["kmId","Cari KPI…"],["cnAuth",""],["cnFreq",""],
-   ["fBulan","Cari bulan…"],["dashBulan","Cari bulan…"],["rcBulan","Cari bulan…"]
+   ["fBulan","Cari bulan…"],["dashBulan","Cari bulan…"],["rcBulan","Cari bulan…"],
+   ["msOutlet","Cari outlet…"],["msBulanF","Cari bulan…"]
   ].forEach(([id,ph])=>{ const el=$("#"+id); if(el) enhanceSelect(el,{placeholder:ph||"Ketik untuk mencari…"}); });
 }
 
@@ -2531,6 +2566,7 @@ function audType(id){ return AUDIT_TYPES.find(t=>t.id===id); } // dipakai ekspor
 const SYSTEMS = [
   {id:"hg", name:"Sistem Human Growth (Audit HG, Grooming, Disiplin, Kompetensi, Coaching)", team:"HGPGA"},
   {id:"lms", name:"LMS Pelatihan & Kompetensi", team:"HGPGA"},
+  {id:"mystery", name:"Mystery Shopper", team:"QIC"},
   {id:"ga", name:"GA Helpdesk (Sarana Prasarana & Tiket GA)", team:"HGPGA"},
   {id:"ops_daily", name:"Sistem Operasional Outlet (Joblist, Huddle, Operan Shift)", team:"OPS"},
   {id:"bsc_sys", name:"Sistem BSC Outlet", team:"OPS"},
@@ -2546,6 +2582,7 @@ const PARAMS = [
   {id:"disiplin", name:"Disiplin", team:"HGPGA", sys:"hg", unit:"%", target:100, dir:"up"},
   {id:"pelatihan", name:"Pelatihan", team:"HGPGA", sys:"lms", unit:"%", target:100, dir:"up"},
   {id:"kompetensi", name:"Kompetensi", team:"HGPGA", sys:"lms", unit:"", target:80, dir:"up"},
+  {id:"mystery_score", name:"Mystery Shopper", team:"QIC", sys:"mystery", unit:"", target:85, dir:"up"},
   {id:"coaching", name:"Coaching Leader", team:"HGPGA", sys:"hg", unit:"%", target:100, dir:"up"},
   {id:"sarpras", name:"Sarana Prasarana", team:"HGPGA", sys:"ga", unit:"%", target:95, dir:"up"},
   {id:"ga_ticket", name:"Tiket General Affairs (open)", team:"HGPGA", sys:"ga", unit:"", target:0, dir:"down"},
@@ -2818,6 +2855,194 @@ function bscNormalize(row, period, bestPoints){
     created_at: new Date().toISOString()
   };
 }
+/* ---- MYSTERY SHOPPER: tampilan ---- */
+function visibleMsVisits(){
+  let list = isOutlet() ? db.msVisits.filter(v=>v.outlet===currentUser.outlet) : db.msVisits.slice();
+  const mf = $("#msBulanF") ? $("#msBulanF").value : "all";
+  if(mf && mf!=="all") list = list.filter(v=>(v.tanggal||"").slice(0,7)===mf);
+  const of = $("#msOutlet") ? $("#msOutlet").value : "";
+  if(of) list = list.filter(v=>v.outlet===of);
+  return list.sort((a,b)=>(b.tanggal||"").localeCompare(a.tanggal||""));
+}
+function msScoreChip(score){
+  if(score===null||score===undefined) return '<span class="chip chip-gray">No Data</span>';
+  const t = (PARAMS.find(p=>p.id==="mystery_score")||{}).target||85;
+  const cls = score>=t? "chip-green" : (score>=t*0.8? "chip-amber":"chip-red");
+  return '<span class="chip '+cls+'">'+fmtVal(score,"")+'</span>';
+}
+function renderMystery(){
+  const body = $("#msBody"); if(!body) return;
+  // opsi filter
+  const outlets = [...new Set(db.msVisits.map(v=>v.outlet))].sort();
+  const selO = $("#msOutlet"); const curO = selO.value;
+  selO.innerHTML = '<option value="">Semua Outlet</option>'+outlets.map(o=>`<option ${o===curO?"selected":""}>${esc(o)}</option>`).join("");
+  const months = [...new Set(db.msVisits.map(v=>(v.tanggal||"").slice(0,7)).filter(v=>/^\d{4}-\d{2}$/.test(v)))].sort().reverse();
+  const selM = $("#msBulanF"); const curM = selM.value||"all";
+  selM.innerHTML = '<option value="all">Semua Bulan</option>'+months.map(mm=>`<option value="${mm}" ${mm===curM?"selected":""}>${monthLabelID(mm)}</option>`).join("");
+  if(typeof ssRefresh==="function"){ ssRefresh("msOutlet"); ssRefresh("msBulanF"); }
+
+  const list = visibleMsVisits();
+  const scored = list.filter(v=>v.score!==null&&v.score!==undefined);
+  const avg = scored.length? Math.round(scored.reduce((a,v)=>a+v.score,0)/scored.length*10)/10 : null;
+  $("#msSummary").textContent = list.length+" kunjungan"+(avg!==null? " · rata-rata skor "+avg : "");
+  $("#cntMs").textContent = db.msVisits.length;
+
+  body.innerHTML = list.length? list.map(v=>`
+    <tr data-id="${v.id}" style="cursor:pointer">
+      <td style="white-space:nowrap">${fmtDate(v.tanggal)}${v.waktu? "<br><span class=muted style=font-size:11px>"+esc(v.waktu)+"</span>":""}</td>
+      <td><b>${esc(shortOutletName(v.outlet))}</b>${v.insanku?"":""}</td>
+      <td style="max-width:180px">${esc(v.skenario||"—")}</td>
+      <td>${msScoreChip(v.score)}</td>
+      <td>${esc(v.insanku||"—")}</td>
+      <td style="max-width:260px">${esc((v.gap||"—").slice(0,90))}${(v.gap||"").length>90?"…":""}</td>
+      <td>${v.fotoUrl?'<a href="'+esc(v.fotoUrl)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">🧾 Struk</a>':""}
+          ${v.videos&&v.videos.length? ' <span class="chip chip-blue">🎥 '+v.videos.length+'</span>':""}</td>
+    </tr>`).join("") : '<tr><td colspan="7" class="empty">Belum ada kunjungan. Sinkronkan konektor Mystery Shopper di Review Rutin.</td></tr>';
+  $$("#msBody tr[data-id]").forEach(tr=>tr.addEventListener("click", ()=>openMsDetail(tr.dataset.id)));
+}
+function openMsDetail(id){
+  const v = db.msVisits.find(x=>x.id===id); if(!v) return;
+  $("#msTitle").textContent = "Mystery Shopper — "+shortOutletName(v.outlet)+" · "+fmtDate(v.tanggal);
+  const rows = (v.detail||[]).map((d,i)=>`
+    <tr><td style="width:34px">${i+1}</td><td>${esc(d.label)}</td><td>${esc(d.answer)}</td>
+    <td style="width:60px">${d.score===null?'<span class="muted">—</span>':d.score}</td></tr>`).join("");
+  const alasan = (v.alasan||[]).filter(a=>a).map(a=>"<li>"+esc(a)+"</li>").join("");
+  const vids = (v.videos||[]).map(f=>`
+    <div style="margin:10px 0"><div class="muted" style="font-size:11.5px;margin-bottom:4px">🎥 ${esc(f.name)}</div>
+    <iframe src="${esc(f.url)}" style="width:100%;aspect-ratio:16/9;border:1px solid var(--line);border-radius:10px" allow="autoplay" allowfullscreen loading="lazy"></iframe></div>`).join("");
+  $("#msDetailBody").innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      ${msScoreChip(v.score)} <span class="chip chip-gray">${esc(v.skenario||"Skenario —")}</span>
+      ${v.insanku? '<span class="chip chip-blue">InsanKU: '+esc(v.insanku)+'</span>':""}
+      ${v.email? '<span class="muted" style="font-size:11.5px">Penilai: '+esc(v.email)+'</span>':""}
+    </div>
+    <table class="tbl"><thead><tr><th>#</th><th>Butir</th><th>Jawaban</th><th>Skor</th></tr></thead><tbody>${rows}</tbody></table>
+    ${alasan? '<h4 style="margin:14px 0 6px">Alasan singkat penilai</h4><ul style="margin:0 0 0 18px;font-size:13px">'+alasan+'</ul>':""}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+      <div class="card" style="border-left:4px solid var(--green)"><b>👍 Perlu diapresiasi</b><p style="margin:6px 0 0;font-size:13px">${esc(v.apresiasi||"—")}</p></div>
+      <div class="card" style="border-left:4px solid var(--red)"><b>⚠ Gap terbesar</b><p style="margin:6px 0 0;font-size:13px">${esc(v.gap||"—")}</p></div>
+    </div>
+    ${v.coaching? '<div class="card" style="margin-top:12px;border-left:4px solid var(--brand)"><b>🎓 Hasil Coaching</b><p style="margin:6px 0 0;font-size:13px">'+esc(v.coaching)+'</p></div>':""}
+    ${v.fotoUrl? '<p style="margin-top:12px"><a class="btn btn-ghost" href="'+esc(v.fotoUrl)+'" target="_blank" rel="noopener">🧾 Lihat foto struk</a></p>':""}
+    ${vids}`;
+  $("#msBack").classList.add("open");
+}
+$("#msClose") && $("#msClose").addEventListener("click", ()=>$("#msBack").classList.remove("open"));
+$("#msBack") && $("#msBack").addEventListener("click", e=>{ if(e.target===e.currentTarget) $("#msBack").classList.remove("open"); });
+$("#msOutlet") && $("#msOutlet").addEventListener("change", renderMystery);
+$("#msBulanF") && $("#msBulanF").addEventListener("change", renderMystery);
+
+/* ---- MYSTERY SHOPPER: skoring & adapter ----
+   Skor kunjungan = rata-rata 8 butir (bobot per butir bisa diubah pada MS_ITEMS: w).
+   Pilihan terbaik=100, tengah=50, terburuk=0. */
+const MS_ITEMS = [
+  {key:"q1", label:"Kesan fisik apotek", w:1, map:[["nyaman",100],["biasa",50],["kurang",0]]},
+  {key:"q2", label:"Greeting pembuka", w:1, map:[["ada",100],["tidak",0]]},
+  {key:"q3", label:"Kehangatan greeting", w:1, map:[["smile",100],["formalitas",50],["kurang",0]]},
+  {key:"q4", label:"Kecepatan pelayanan", w:1, map:[["cepat",100],["cukup",50],["lama",0]]},
+  {key:"q5", label:"Terbantu rekomendasi", w:1, map:[["tidak",0],["terbantu",100]]},
+  {key:"q6", label:"Penawaran alternatif wajar", w:1, map:[["ya",100],["tidak",0]]},
+  {key:"q7", label:"Greeting penutup", w:1, map:[["ya",100],["tidak",0]]},
+  {key:"q8", label:"Percaya untuk kembali", w:1, map:[["ragu",50],["ya",100],["tidak",0]]}
+];
+function msItemScore(item, answer){
+  const a = String(answer||"").toLowerCase().trim();
+  if(!a) return null;
+  for(const [frag, val] of item.map){ if(a.includes(frag)) return val; }
+  return null; // jawaban tak dikenal → tidak dihitung (bukan 0)
+}
+function msVisitScore(v){
+  let sum=0, wsum=0; const detail=[];
+  MS_ITEMS.forEach(it=>{
+    const sc = msItemScore(it, v[it.key]);
+    detail.push({label:it.label, answer:v[it.key]||"—", score:sc});
+    if(sc!==null){ sum += sc*it.w; wsum += it.w; }
+  });
+  return { score: wsum? Math.round(sum/wsum*10)/10 : null, detail };
+}
+function msMatchOutlet(name){
+  const sq = x=>String(x||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const n = sq(name);
+  if(!n) return String(name||"").trim();
+  let best=null, bestLen=0;
+  OUTLETS.forEach(o=>{
+    const on = sq(o.name);
+    const core = sq(o.name.toLowerCase().replace(/^apotekku\s*(hp\s*)?(no\.?\s*\d+\s*)?/,""));
+    if((core.length>3 && n.includes(core)) || on.includes(n) || n.includes(on)){
+      if(core.length>bestLen){ best=o.name; bestLen=core.length; }
+    }
+  });
+  return best || String(name).trim();
+}
+function msMatchVideos(outletName, videos){
+  const core = String(outletName).toLowerCase().replace(/^apotekku\s*(no\.?\s*\d+\s*)?/,"").replace(/[^a-z0-9 ]/g," ").trim();
+  if(!core) return [];
+  const words = core.split(" ").filter(w=>w.length>=3);
+  if(!words.length) return [];
+  const need = Math.max(1, Math.ceil(words.length/2));
+  return (videos||[]).filter(f=>{
+    const fn = String(f.name||"").toLowerCase().replace(/[^a-z0-9 ]/g," ");
+    return words.filter(w=>fn.includes(w)).length >= need;
+  }).map(f=>({name:f.name, url:f.url}));
+}
+async function syncMystery(cfg, quiet){
+  try{
+    if(!cfg.baseUrl) throw Object.assign(new Error("Belum dikonfigurasi — tempel URL Web App Apps Script di Base URL"), {status:0});
+    const key = getApiKey(cfg);
+    const url = cfg.baseUrl + (cfg.baseUrl.includes("?")?"&":"?") + "token=" + encodeURIComponent(key||"");
+    const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), 20000);
+    let res; try{ res = await fetch(url, {signal:ctl.signal}); } finally{ clearTimeout(to); }
+    if(!res.ok){ const e=new Error("HTTP "+res.status); e.status=res.status; e.url=url; throw e; }
+    const data = await res.json();
+    if(data && data.ok===false && /unauthor/i.test(String(data.error||""))){
+      const e = new Error("Token feed tidak valid"); e.status = 401; throw e;
+    }
+    const visits = (data && data.visits) || [];
+    const videos = (data && data.videos) || [];
+    let added=0, updated=0;
+    const normalized = [];
+    const msTarget = (PARAMS.find(p=>p.id==="mystery_score")||{}).target||85;
+    visits.forEach(v=>{
+      const outlet = msMatchOutlet(v.outlet);
+      const tanggal = (v.tanggal||"").slice(0,10) || todayStr();
+      const id = "ms-"+String(v.row||v.submittedAt).replace(/[^A-Za-z0-9-]/g,"")+"-"+tanggal;
+      const sc = msVisitScore(v);
+      const rec = { id, row:v.row, submittedAt:v.submittedAt, email:v.email,
+        outlet, outletAsli:v.outlet, tanggal, waktu:v.waktu, skenario:v.skenario,
+        score:sc.score, detail:sc.detail, alasan:v.alasan||[], apresiasi:v.apresiasi, gap:v.gap,
+        fotoUrl:v.fotoUrl, insanku:v.insanku, coaching:v.coaching,
+        videos: msMatchVideos(outlet, videos), updatedAt:new Date().toISOString() };
+      const ex = db.msVisits.find(x=>x.id===id);
+      if(ex){ Object.assign(ex, rec); updated++; } else { db.msVisits.push(rec); added++; }
+      normalized.push({
+        source_system:"mystery_gform", source_record_id:id,
+        team:"QIC", team_source:"quality_improvement",
+        outlet_id:outlet, review_date:tanggal, parameter:"mystery_score",
+        score:sc.score, target:msTarget,
+        status: sc.score===null? "no_data" : normStatus(sc.score, msTarget, "up"),
+        finding: sc.score!==null && sc.score < msTarget
+          ? "Mystery Shopper "+fmtVal(sc.score,"")+" — Gap: "+(v.gap||"(tidak diisi)") : "",
+        evidence_url: v.fotoUrl||"", is_repeated:false,
+        period: tanggal.slice(0,7), created_at:new Date().toISOString()
+      });
+    });
+    upsertNormalized(normalized, cfg.id);
+    cfg.count = db.msVisits.length;
+    cfg.status = "connected"; cfg.lastSync = new Date().toISOString(); cfg.lastError = "";
+    return {ok:true, n:visits.length, added, updated};
+  }catch(e){
+    cfg.status = "failed";
+    cfg.lastError = "[data] "+humanConnError(cfg, e, e.url);
+    if((e.status===401||e.status===403) && localStorage.getItem("tf_key_"+cfg.id)){
+      forgetDeviceKey(cfg.id);
+      if(!quiet && typeof prompt==="function" && askSessionKey(cfg)) return syncMystery(cfg, quiet);
+    } else if(!quiet && (e.status===401||e.status===403) && !sessionApiKeys[cfg.id] && typeof prompt==="function"){
+      if(askSessionKey(cfg)) return syncMystery(cfg, quiet);
+    }
+    return {ok:false, why: cfg.lastError};
+  }
+}
+
 /* ---- Adapter LMS Pelatihan & Kompetensi ----
    GET {base}/api/outlet-avg-score?date=... (header X-API-KEY)
    Parameter date opsional; tanpa date, API memakai batas tanggal hari ini.
@@ -2972,6 +3197,7 @@ async function syncConnector(id, opts){
     let result;
     if(c.adapter==="bsc_v2") result = await syncBsc(c, quiet);
     else if(c.adapter==="lms_avg") result = await syncLms(c, quiet);
+    else if(c.adapter==="mystery_gform") result = await syncMystery(c, quiet);
     else {
       const url = joinUrl(c.baseUrl, (c.endpoints&&c.endpoints.findings)||"/api/review-rutin/findings")+"?system="+id;
       try{
@@ -3863,6 +4089,7 @@ function switchView(name){
   if(name==="prioritas") renderPrioritas();
   if(name==="review") renderAktivitas();
   if(name==="kpi") renderKpi();
+  if(name==="mystery") renderMystery();
   if(name==="laporan") renderReport();
 }
 $$(".tab-btn").forEach(b=>b.addEventListener("click", ()=>switchView(b.dataset.view)));
@@ -3904,6 +4131,7 @@ function fillOutletSelectors(){
 function renderAll(){
   fillOutletSelectors();
   $("#cntTemuan").textContent = visibleItems().length;
+  if($("#cntMs")) $("#cntMs").textContent = (db.msVisits||[]).length;
   const curK = $("#fKpiHist").value;
   $("#fKpiHist").innerHTML = '<option value="">Semua KPI</option>'+KPIS.map(k=>`<option value="${k.id}" ${k.id===curK?"selected":""}>${esc(k.name)}</option>`).join("");
   ssRefresh("fKpiHist");
