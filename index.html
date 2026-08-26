@@ -1050,7 +1050,7 @@ const firebaseState = { status:"idle", message:"Firebase belum diinisialisasi." 
    Dipakai untuk menulis HANYA dokumen yang diubah sesi ini. Tanpa ini, setiap save
    menulis-ulang seluruh koleksi dari salinan memori — sesi lain yang datanya basi
    akan menimpa foto/perubahan yang baru diunggah rekan (akar masalah foto hilang). */
-const APP_VERSION = 14; // dinaikkan tiap rilis yang mengubah cara simpan
+const APP_VERSION = 15; // dinaikkan tiap rilis yang mengubah cara simpan
 let appStale = false;   // true bila cloud menandai versi minimum lebih baru → tab ini dikunci tulis
 let cloudShadow = null;
 function stableStringify(v){
@@ -1240,6 +1240,43 @@ async function loadFirestoreDb(){
 function itemDocRef(id){
   return firebaseApi.doc(firebaseApi.collection(firebaseApi.rootRef, "items"), String(id));
 }
+function msVisitDocRef(id){
+  return firebaseApi.doc(firebaseApi.collection(firebaseApi.rootRef, "msVisits"), String(id));
+}
+function reviewDataDocId(record){
+  return (record.source_system+"__"+record.source_record_id).replace(/[\/#?\[\]*]/g,"_");
+}
+function reviewDataDocRef(record){
+  return firebaseApi.doc(firebaseApi.collection(firebaseApi.rootRef, "reviewData"), reviewDataDocId(record));
+}
+async function persistMsVisitDocument(visit){
+  if(!firebaseApi || !cloudReadOk || appStale) throw new Error("Firestore belum siap untuk menyimpan kunjungan.");
+  const payload = stripUndefined(cloneData(visit));
+  await firebaseApi.setDoc(msVisitDocRef(payload.id), payload);
+  if(!cloudShadow) cloudShadow = {root:null, cols:{}};
+  const shadowCol = (cloudShadow.cols.msVisits = cloudShadow.cols.msVisits || {});
+  shadowCol[String(payload.id)] = stableStringify(payload);
+}
+async function persistReviewDataDocument(record){
+  if(!firebaseApi || !cloudReadOk || appStale) throw new Error("Firestore belum siap untuk menyimpan data review.");
+  const payload = stripUndefined(cloneData({id:reviewDataDocId(record), ...record}));
+  await firebaseApi.setDoc(reviewDataDocRef(record), payload);
+  if(!cloudShadow) cloudShadow = {root:null, cols:{}};
+  const shadowCol = (cloudShadow.cols.reviewData = cloudShadow.cols.reviewData || {});
+  shadowCol[String(payload.id)] = stableStringify(payload);
+}
+async function deleteMsVisitDocument(id){
+  if(!firebaseApi || !cloudReadOk || appStale) throw new Error("Firestore belum siap untuk menghapus kunjungan.");
+  await firebaseApi.deleteDoc(msVisitDocRef(id));
+  if(cloudShadow && cloudShadow.cols.msVisits) delete cloudShadow.cols.msVisits[String(id)];
+}
+async function deleteReviewDataDocument(sourceSystem, sourceRecordId){
+  if(!firebaseApi || !cloudReadOk || appStale) throw new Error("Firestore belum siap untuk menghapus data review.");
+  const record = {source_system:sourceSystem, source_record_id:sourceRecordId};
+  const id = reviewDataDocId(record);
+  await firebaseApi.deleteDoc(reviewDataDocRef(record));
+  if(cloudShadow && cloudShadow.cols.reviewData) delete cloudShadow.cols.reviewData[id];
+}
 function itemConflict(message){
   const err = new Error(message);
   err.code = "item-conflict";
@@ -1338,7 +1375,7 @@ async function pushCloudSnapshot(snapshot){
     const failed = failLists.flat();
     if(failed.length){
       console.warn("Dokumen gagal tersimpan ke cloud:", failed);
-      toast("⚠ "+failed.length+" data gagal tersimpan ke cloud ("+failed.slice(0,3).map(f=>f.id).join(", ")+(failed.length>3?", …":"")+"). Kemungkinan foto terlalu besar — coba unggah ulang dengan foto lebih kecil.");
+      toast("⚠ "+failed.length+" data gagal tersimpan ke cloud ("+failed.slice(0,3).map(f=>f.id).join(", ")+(failed.length>3?", …":"")+"). Periksa izin Firestore dan koneksi, lalu coba lagi.");
     }
     if(firebaseState.status!=="ready"){
       firebaseState.status = "ready";
@@ -3022,10 +3059,13 @@ function msScoreChip(score){
 function renderMystery(){
   const body = $("#msBody"); if(!body) return;
   // opsi filter
-  const outlets = [...new Set(db.msVisits.map(v=>v.outlet))].sort();
+  const scopedVisits = isOutlet() ? db.msVisits.filter(v=>v.outlet===currentUser.outlet)
+                     : isShopper() ? db.msVisits.filter(v=>v.email===(currentUser.user||currentUser.name))
+                     : db.msVisits;
+  const outlets = [...new Set(scopedVisits.map(v=>v.outlet))].sort();
   const selO = $("#msOutlet"); const curO = selO.value;
   selO.innerHTML = '<option value="">Semua Outlet</option>'+outlets.map(o=>`<option ${o===curO?"selected":""}>${esc(o)}</option>`).join("");
-  const months = [...new Set(db.msVisits.map(v=>(v.tanggal||"").slice(0,7)).filter(v=>/^\d{4}-\d{2}$/.test(v)))].sort().reverse();
+  const months = [...new Set(scopedVisits.map(v=>(v.tanggal||"").slice(0,7)).filter(v=>/^\d{4}-\d{2}$/.test(v)))].sort().reverse();
   const selM = $("#msBulanF"); const curM = selM.value||"all";
   selM.innerHTML = '<option value="all">Semua Bulan</option>'+months.map(mm=>`<option value="${mm}" ${mm===curM?"selected":""}>${monthLabelID(mm)}</option>`).join("");
   if(typeof ssRefresh==="function"){ ssRefresh("msOutlet"); ssRefresh("msBulanF"); }
@@ -3152,9 +3192,15 @@ function msfCollectAnswers(){
   return ans;
 }
 function msfUpdateScore(){
-  const {score} = msVisitScore(msfCollectAnswers());
+  const answers = msfCollectAnswers();
   const el = $("#msfScorePrev");
-  if(score===null){ el.className="chip chip-gray"; el.style.cssText="font-size:14px;padding:8px 14px"; el.textContent="Skor: — (lengkapi 8 butir)"; return; }
+  const answered = MS_ITEMS.filter(it=>answers[it.key]).length;
+  if(answered<MS_ITEMS.length){
+    el.className="chip chip-gray"; el.style.cssText="font-size:14px;padding:8px 14px";
+    el.textContent="Skor: — (lengkapi "+(MS_ITEMS.length-answered)+" butir lagi)";
+    return;
+  }
+  const {score} = msVisitScore(answers);
   const t = (PARAMS.find(p=>p.id==="mystery_score")||{}).target||85;
   el.className = "chip "+(score>=t?"chip-green":(score>=t*0.8?"chip-amber":"chip-red"));
   el.style.cssText="font-size:14px;padding:8px 14px";
@@ -3210,9 +3256,8 @@ async function saveMsForm(){
     apresiasi:$("#msfApresiasi").value.trim(), gap:$("#msfGap").value.trim(),
     fotoUrl: msFotoData||"", insanku:$("#msfInsanku").value.trim(),
     coaching:$("#msfCoaching").value.trim(), videos, updatedAt:new Date().toISOString() };
-  db.msVisits.push(v);
   const msTarget = (PARAMS.find(p=>p.id==="mystery_score")||{}).target||85;
-  upsertNormalized([{
+  const normalizedVisit = {
     source_system:"mystery_gform", source_record_id:id,
     team:"QIC", team_source:"quality_improvement",
     outlet_id:outlet, review_date:tanggal, parameter:"mystery_score",
@@ -3221,16 +3266,37 @@ async function saveMsForm(){
     finding: sc.score!==null && sc.score<msTarget ? "Mystery Shopper "+fmtVal(sc.score,"")+" — Gap: "+v.gap : "",
     evidence_url: /^https?:/.test(v.fotoUrl)? v.fotoUrl : "",
     is_repeated:false, period:tanggal.slice(0,7), created_at:new Date().toISOString()
-  }], "mystery");
+  };
+  const btn = $("#btnMsSave");
+  btn.disabled = true; btn.textContent = "Menyimpan…";
+  try{
+    await Promise.all([persistMsVisitDocument(v), persistReviewDataDocument(normalizedVisit)]);
+  }catch(err){
+    btn.disabled = false; btn.textContent = "💾 Simpan Kunjungan";
+    toast("⚠ Kunjungan belum tersimpan: "+(err.message||"koneksi Firestore gagal"));
+    return;
+  }
+  db.msVisits.push(v);
+  upsertNormalized([normalizedVisit], "mystery");
   const cfg = connCfg("mystery"); if(cfg){ cfg.count = db.msVisits.length; if(cfg.status==="not_integrated") cfg.status="connected"; cfg.lastSync=new Date().toISOString(); }
   save();
   $("#msFormBack").classList.remove("open");
   renderMystery();
+  btn.disabled = false; btn.textContent = "💾 Simpan Kunjungan";
   toast("✓ Kunjungan tersimpan — skor "+(sc.score===null?"—":fmtVal(sc.score,"")));
 }
-function deleteMsVisit(id){
+async function deleteMsVisit(id){
   if(!isAdmin()){ toast("⚠ Hanya Admin yang dapat menghapus"); return; }
   if(!confirm("Hapus kunjungan ini beserta record Review Rutin-nya?")) return;
+  try{
+    await Promise.all([
+      deleteMsVisitDocument(id),
+      deleteReviewDataDocument("mystery_gform", id)
+    ]);
+  }catch(err){
+    toast("⚠ Kunjungan belum dihapus: "+(err.message||"koneksi Firestore gagal"));
+    return;
+  }
   db.msVisits = db.msVisits.filter(v=>v.id!==id);
   db.reviewData = db.reviewData.filter(r=>!(r.source_system==="mystery_gform" && r.source_record_id===id));
   const cfg = connCfg("mystery"); if(cfg) cfg.count = db.msVisits.length;
@@ -3315,6 +3381,7 @@ async function syncMystery(cfg, quiet){
     const visits = (data && data.visits) || [];
     const videos = (data && data.videos) || [];
     let added=0, updated=0;
+    const visitRecords = [];
     const normalized = [];
     const msTarget = (PARAMS.find(p=>p.id==="mystery_score")||{}).target||85;
     visits.forEach(v=>{
@@ -3329,6 +3396,7 @@ async function syncMystery(cfg, quiet){
         videos: msMatchVideos(outlet, videos), updatedAt:new Date().toISOString() };
       const ex = db.msVisits.find(x=>x.id===id);
       if(ex){ Object.assign(ex, rec); updated++; } else { db.msVisits.push(rec); added++; }
+      visitRecords.push(rec);
       normalized.push({
         source_system:"mystery_gform", source_record_id:id,
         team:"QIC", team_source:"quality_improvement",
@@ -3342,6 +3410,10 @@ async function syncMystery(cfg, quiet){
       });
     });
     upsertNormalized(normalized, cfg.id);
+    await Promise.all([
+      ...visitRecords.map(persistMsVisitDocument),
+      ...normalized.map(persistReviewDataDocument)
+    ]);
     cfg.count = db.msVisits.length;
     cfg.status = "connected"; cfg.lastSync = new Date().toISOString(); cfg.lastError = "";
     return {ok:true, n:visits.length, added, updated};

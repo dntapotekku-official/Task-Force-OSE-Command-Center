@@ -42,9 +42,9 @@ service cloud.firestore {
       // Sub-koleksi lain yang dikenali aplikasi
       match /{sub}/{docId} {
         allow read: if true;
-        allow write: if sub in ['audits', 'users', 'acts', 'kpiEntries', 'reviewData', 'integrations']
+        allow write: if sub in ['audits', 'users', 'acts', 'kpiEntries', 'reviewData', 'integrations', 'msVisits']
                      && request.resource.data.size() < 60;
-        allow delete: if sub in ['audits', 'users', 'acts', 'kpiEntries', 'reviewData', 'integrations'];
+        allow delete: if sub in ['audits', 'users', 'acts', 'kpiEntries', 'reviewData', 'integrations', 'msVisits'];
       }
     }
 
