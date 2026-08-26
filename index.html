@@ -1021,7 +1021,7 @@ const KPIS = [
 
 /* Data bisnis tidak lagi hardcode — sumber data tunggal: Cloud Firestore */
 /* ================= PENYIMPANAN: CLOUD FIRESTORE ================= */
-const KEY = "tf_ose_data_v2"; // v2: update FAST_IMPROVEMENT 13-14 Juli 2026
+const KEY = "tf_ose_data_v2"; // legacy key lama (data bisnis tidak lagi ditulis ke sini)
 let storageOk = false;
 try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); storageOk = true; }catch(e){ storageOk = false; }
 let db;
@@ -1050,7 +1050,7 @@ const firebaseState = { status:"idle", message:"Firebase belum diinisialisasi." 
    Dipakai untuk menulis HANYA dokumen yang diubah sesi ini. Tanpa ini, setiap save
    menulis-ulang seluruh koleksi dari salinan memori — sesi lain yang datanya basi
    akan menimpa foto/perubahan yang baru diunggah rekan (akar masalah foto hilang). */
-const APP_VERSION = 13; // dinaikkan tiap rilis yang mengubah cara simpan
+const APP_VERSION = 14; // dinaikkan tiap rilis yang mengubah cara simpan
 let appStale = false;   // true bila cloud menandai versi minimum lebih baru → tab ini dikunci tulis
 let cloudShadow = null;
 function stableStringify(v){
@@ -1083,6 +1083,9 @@ const FS_COLLECTIONS = [
   ["integrations", d=>d.integrations||[],           r=>r.id],
   ["msVisits",   d=>d.msVisits||[],                 r=>r.id]
 ];
+// Temuan disimpan per dokumen lewat transaksi. Jangan pernah menyimpulkan
+// dokumen harus dihapus hanya karena tidak ada di snapshot memori sebuah tab.
+const FS_SNAPSHOT_COLLECTIONS = FS_COLLECTIONS.filter(([name])=>name!=="items");
 function createDefaultDb(){
   // Tidak ada data hardcode: mulai kosong; data sesungguhnya dimuat dari Firestore
   return { items: [], meta:{visit:VISIT_LABEL} };
@@ -1105,7 +1108,7 @@ function serializeRootDoc(data){
     meta: cloneData(data.meta || {}),
     kpiTargets: cloneData((data.kpi && data.kpi.targets) || {}),
     schema: {
-      version: 3,
+      version: 4,
       shape: "firestore-subcollections",
       updatedAt: data.meta && data.meta.lastSavedAt ? data.meta.lastSavedAt : new Date().toISOString()
     }
@@ -1140,8 +1143,6 @@ function renderStorageNote(){
   note.innerHTML = `💾 <b>${localMsg}</b> ${cloudMsg} ${esc(firebaseState.message)}`;
 }
 function getLocalSnapshot(){
-  // Data bisnis tidak lagi dibaca dari localStorage agar edit manual Firestore
-  // tidak tertimpa cadangan browser yang sudah basi.
   return null;
 }
 function getSnapshotStamp(data){
@@ -1161,7 +1162,7 @@ async function initFirebase(){
     const [
       { initializeApp },
       { getAnalytics, isSupported },
-      { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc, onSnapshot },
+      { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc, onSnapshot, runTransaction },
       { getStorage, ref: sRef, uploadString, getDownloadURL, deleteObject },
       { getAuth, signInAnonymously, onAuthStateChanged },
       appCheckMod
@@ -1194,7 +1195,7 @@ async function initFirebase(){
       firebaseAuthUser = null;
     }
     const store = getFirestore(app);
-    firebaseApi = { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, setDoc,
+    firebaseApi = { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, runTransaction, setDoc,
       rootRef: doc(store, FIREBASE_FS_ROOT.collection, FIREBASE_FS_ROOT.doc) };
     // Google Cloud Storage via Firebase Storage — tanpa kredensial di browser
     storageApi = { getStorage, sRef, uploadString, getDownloadURL, deleteObject, app };
@@ -1214,14 +1215,13 @@ async function fetchSubcollectionDocs(name){
 }
 async function loadFirestoreDb(){
   const rootSnap = await firebaseApi.getDoc(firebaseApi.rootRef);
-  if(!rootSnap.exists()) return null;
-  const root = rootSnap.data() || {};
+  const root = rootSnap.exists() ? (rootSnap.data() || {}) : {};
   const [items, audits, users, actsRows, kpiEntries, reviewRows, integRows, msRows] = await Promise.all(
     FS_COLLECTIONS.map(([name])=>fetchSubcollectionDocs(name))
   );
-  return {
+  const data = {
     meta: cloneData(root.meta || {visit:VISIT_LABEL}),
-    items: items.map(cloneData),
+    items: items.map(cloneData).filter(item=>!item.deletedAt),
     audits: audits.map(cloneData),
     users: users.map(cloneData),
     acts: fromActsArray(actsRows),
@@ -1230,6 +1230,66 @@ async function loadFirestoreDb(){
     integrations: integRows.map(cloneData),
     msVisits: msRows.map(cloneData)
   };
+  const hasData = !!(
+    data.items.length || data.audits.length || data.users.length || Object.keys(data.acts).length ||
+    data.kpi.entries.length || data.reviewData.length || data.integrations.length || data.msVisits.length ||
+    Object.keys(data.kpi.targets).length || Object.keys(data.meta || {}).length
+  );
+  return hasData ? data : null;
+}
+function itemDocRef(id){
+  return firebaseApi.doc(firebaseApi.collection(firebaseApi.rootRef, "items"), String(id));
+}
+function itemConflict(message){
+  const err = new Error(message);
+  err.code = "item-conflict";
+  return err;
+}
+async function persistItemDocument(item, expectedUpdated){
+  if(!firebaseApi || !cloudReadOk || appStale) throw new Error("Firestore belum siap untuk menyimpan temuan.");
+  const payload = stripUndefined(cloneData(item));
+  const ref = itemDocRef(payload.id);
+  await firebaseApi.runTransaction(ref.firestore, async tx=>{
+    const snap = await tx.get(ref);
+    if(expectedUpdated===null){
+      if(snap.exists()) throw itemConflict("ID temuan sudah digunakan.");
+    } else {
+      if(!snap.exists()) throw itemConflict("Temuan sudah dihapus oleh pengguna lain.");
+      const cloudUpdated = String((snap.data()||{}).updated||"");
+      if(cloudUpdated!==String(expectedUpdated||"")) throw itemConflict("Temuan telah diperbarui oleh pengguna lain.");
+    }
+    tx.set(ref, payload);
+  });
+  const shadowCol = (cloudShadow.cols.items = cloudShadow.cols.items || {});
+  shadowCol[String(payload.id)] = stableStringify(payload);
+}
+async function deleteItemDocument(id, expectedUpdated){
+  if(!firebaseApi || !cloudReadOk || appStale) throw new Error("Firestore belum siap untuk menghapus temuan.");
+  const ref = itemDocRef(id);
+  await firebaseApi.runTransaction(ref.firestore, async tx=>{
+    const snap = await tx.get(ref);
+    if(!snap.exists()) throw itemConflict("Temuan sudah dihapus oleh pengguna lain.");
+    const current = snap.data()||{};
+    if(current.deletedAt) throw itemConflict("Temuan sudah dihapus oleh pengguna lain.");
+    const cloudUpdated = String(current.updated||"");
+    if(cloudUpdated!==String(expectedUpdated||"")) throw itemConflict("Temuan telah diperbarui oleh pengguna lain.");
+    const now = new Date().toISOString();
+    const archived = stripUndefined(cloneData(current));
+    archived.deletedAt = now;
+    archived.updated = now;
+    archived.log = archived.log||[];
+    archived.log.push({t:now, msg:"Temuan diarsipkan (soft delete)"});
+    tx.set(ref, archived);
+  });
+  if(cloudShadow && cloudShadow.cols.items) delete cloudShadow.cols.items[String(id)];
+}
+async function upsertImportedItems(items){
+  if(!firebaseApi || !cloudReadOk || appStale) throw new Error("Firestore belum siap untuk impor temuan.");
+  const collRef = firebaseApi.collection(firebaseApi.rootRef, "items");
+  for(const item of items){
+    const payload = stripUndefined(cloneData(item));
+    await firebaseApi.setDoc(firebaseApi.doc(collRef, String(payload.id)), payload);
+  }
 }
 async function syncSubcollection(name, rows){
   const collRef = firebaseApi.collection(firebaseApi.rootRef, name);
@@ -1271,7 +1331,7 @@ async function pushCloudSnapshot(snapshot){
       await firebaseApi.setDoc(firebaseApi.rootRef, rootPayload);
       cloudShadow.root = rootKey;
     }
-    const failLists = await Promise.all(FS_COLLECTIONS.map(([name, pick, idOf])=>{
+    const failLists = await Promise.all(FS_SNAPSHOT_COLLECTIONS.map(([name, pick, idOf])=>{
       const rows = pick(snapshot).map(r=>({ id:String(idOf(r)), ...r }));
       return syncSubcollection(name, rows);
     }));
@@ -1332,8 +1392,7 @@ function queueCloudSave(){
 }
 let bootLocalBackup = null; // tidak dipakai; data bisnis tidak lagi dipulihkan dari localStorage
 async function load(){
-  const localData = getLocalSnapshot();
-  bootLocalBackup = localData;
+  bootLocalBackup = null;
   let cloudData = null;
   if(firebaseApi){
     try{
@@ -1344,7 +1403,7 @@ async function load(){
     catch(e){
       cloudReadOk = false;
       firebaseState.status = "error";
-      firebaseState.message = "Gagal membaca data cloud. Mode kosong sementara — penyimpanan ke cloud dinonaktifkan agar data pusat tidak tertimpa.";
+      firebaseState.message = "Gagal membaca data cloud. Data hanya dibaca dari Firestore, jadi muat ulang setelah koneksi/pembaruan akses pulih.";
       console.warn("Firebase load gagal:", e);
       renderStorageNote();
     }
@@ -2178,6 +2237,7 @@ function buildBrief(){
 
 /* ================= MODAL ================= */
 let editing = null; // id or null (add mode)
+let editingVersion = null; // nilai updated saat modal dibuka, untuk deteksi konflik antar-tab
 let fotoData = null;        // foto bukti perbaikan
 let fotoTemuanData = null;  // foto kondisi temuan
 let fotoPending = false;        // bukti: gagal unggah, menunggu migrasi
@@ -2335,6 +2395,7 @@ function compressImage(file, cb){
 function openModal(id){
   editing = id || null;
   const it = id ? db.items.find(x=>x.id===id) : null;
+  editingVersion = it ? String(it.updated||"") : null;
   $("#modalTitle").textContent = it ? "Detail & Update Temuan" : "Tambah Temuan Baru";
   $("#mOutlet").value = it?it.outlet:($("#fOutlet").value||"");
   $("#mTemuan").value = it?it.temuan:"";
@@ -2397,9 +2458,6 @@ $("#btnSave").addEventListener("click", async ()=>{
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span> Menyimpan…';
   try{
-  if(firebaseApi && cloudReadOk){
-    await refreshFromCloud({render:false});
-  }
   const now = new Date().toISOString();
   const fixedOutlet = isOutlet()? currentUser.outlet : outlet;
   const latest = editing ? db.items.find(x=>x.id===editing) : null;
@@ -2424,27 +2482,54 @@ $("#btnSave").addEventListener("click", async ()=>{
     if(it.pic!==vals.pic && vals.pic) changes.push("PIC → "+vals.pic);
     if(it.timeline!==vals.timeline && vals.timeline) changes.push("deadline → "+fmtDate(vals.timeline));
     if(!changes.length) changes.push("data diperbarui");
-    Object.assign(it, vals, {updated:now});
-    it.log.push({t:now, msg:changes.join("; ")});
+    const next = cloneData(it);
+    Object.assign(next, vals, {updated:now});
+    next.log = next.log||[];
+    next.log.push({t:now, msg:changes.join("; ")});
+    await persistItemDocument(next, editingVersion);
+    Object.assign(it, next);
     toast("✓ Temuan diperbarui");
   } else {
-    db.items.push({ id:"t"+Date.now(), ...vals, created:now, updated:now,
-      log:[{t:now,msg:"Temuan ditambahkan manual"}] });
+    const next = { id:"t"+Date.now(), ...vals, created:now, updated:now,
+      log:[{t:now,msg:"Temuan ditambahkan manual"}] };
+    await persistItemDocument(next, null);
+    db.items.push(next);
     toast("✓ Temuan baru ditambahkan");
   }
   save(); closeModal(); renderAll();
+  } catch(err) {
+    console.warn("Simpan temuan gagal:", err);
+    if(err && err.code==="item-conflict"){
+      await refreshFromCloud({render:true});
+      toast("⚠ Data berubah di perangkat lain. Data terbaru sudah dimuat; buka kembali temuan sebelum mengedit.");
+      closeModal();
+    } else {
+      toast("⚠ Temuan belum tersimpan ke Firestore: "+(err.message||"koneksi gagal"));
+    }
   } finally {
     btn.disabled = false;
     btn.innerHTML = oldHtml;
   }
 });
 
-$("#btnDelete").addEventListener("click", ()=>{
+$("#btnDelete").addEventListener("click", async ()=>{
   if(!editing || !canDelete()){ toast("⚠ Hanya Admin yang dapat menghapus temuan"); return; }
-  db.meta.deletedIds = (db.meta.deletedIds||[]).concat([{id:editing, t:new Date().toISOString()}]).slice(-500);
   if(!confirm("Hapus temuan ini secara permanen?")) return;
-  db.items = db.items.filter(x=>x.id!==editing);
-  save(); closeModal(); renderAll(); toast("Temuan dihapus");
+  const btn = $("#btnDelete");
+  btn.disabled = true;
+  try{
+    await deleteItemDocument(editing, editingVersion);
+    db.meta.deletedIds = (db.meta.deletedIds||[]).concat([{id:editing, t:new Date().toISOString()}]).slice(-500);
+    db.items = db.items.filter(x=>x.id!==editing);
+    save(); closeModal(); renderAll(); toast("Temuan dihapus");
+  }catch(err){
+    console.warn("Hapus temuan gagal:", err);
+    if(err && err.code==="item-conflict"){
+      await refreshFromCloud({render:true});
+      closeModal();
+      toast("⚠ Temuan berubah di perangkat lain, sehingga penghapusan dibatalkan.");
+    } else toast("⚠ Temuan tidak terhapus dari Firestore: "+(err.message||"koneksi gagal"));
+  }finally{ btn.disabled = false; }
 });
 $("#btnCancel").addEventListener("click", closeModal);
 $("#modalClose").addEventListener("click", closeModal);
@@ -2467,14 +2552,19 @@ $("#btnExportJson").addEventListener("click", ()=>{
 $("#importFile").addEventListener("change", e=>{
   const f=e.target.files[0]; if(!f) return;
   const rd=new FileReader();
-  rd.onload=()=>{
+  rd.onload=async ()=>{
     try{
       const parsed = JSON.parse(rd.result);
       if(parsed && parsed.type==="temuan-update" && Array.isArray(parsed.items)){
-        importTemuanUpdate(parsed);
+        await importTemuanUpdate(parsed);
       } else if(parsed && parsed.items){
         if(!confirm("File ini berformat backup penuh — SELURUH data (temuan, akun, KPI, integrasi) akan DIGANTI dengan isi file. Lanjutkan?")) { e.target.value=""; return; }
-        db = parsed; migrate(); save(); renderAll(); toast("✓ Data penuh diimpor ("+db.items.length+" temuan)");
+        await upsertImportedItems(parsed.items);
+        const currentItems = db.items||[];
+        db = parsed;
+        const importedIds = new Set((db.items||[]).map(i=>String(i.id)));
+        db.items = (db.items||[]).concat(currentItems.filter(i=>!importedIds.has(String(i.id))));
+        migrate(); save(); renderAll(); toast("✓ Data penuh diimpor ("+parsed.items.length+" temuan diperbarui/ditambahkan; data Firestore lain tetap dipertahankan)");
       } else toast("⚠ Format file tidak dikenali");
     }catch(err){ toast("⚠ JSON tidak valid: "+err.message); }
     e.target.value="";
@@ -2483,10 +2573,12 @@ $("#importFile").addEventListener("change", e=>{
 });
 /* Impor pembaruan temuan: MERGE, tidak pernah menghapus, tidak menurunkan status */
 const STATUS_RANK = {open:0, progress:1, done:2, verified:3};
-function importTemuanUpdate(payload){
+async function importTemuanUpdate(payload){
   if(!cloudReadOk && firebaseApi){ toast("⚠ Cloud belum terbaca — impor dibatalkan agar tidak menimpa data pusat. Muat ulang halaman dulu."); return; }
+  const beforeDb = cloneData(db);
   const now = new Date().toISOString();
   let updated=0, added=0, skipped=0;
+  const touchedIds = new Set();
   payload.items.forEach(inc=>{
     const ex = db.items.find(i=>i.id===inc.id);
     if(ex){
@@ -2505,11 +2597,12 @@ function importTemuanUpdate(payload){
         ex.updated=now;
         ex.log=ex.log||[];
         ex.log.push({t:now,msg:"Pembaruan dari "+(payload.source||"impor")+" ("+(payload.visit||"")+"): "+ch.join("; ")});
+        touchedIds.add(String(ex.id));
         updated++;
       } else skipped++;
     } else {
       const created=(inc.visitDate||todayStr())+"T02:00:00.000Z";
-      db.items.push({
+      const addedItem = {
         id:inc.id||("t"+Date.now()+Math.floor(Math.random()*999)),
         outlet:inc.outlet, temuan:inc.temuan+(inc.divExtra?" ("+inc.divExtra.replace(/^, /,"")+")":""),
         ca:inc.ca||"", pa:inc.pa||"", timeline:inc.timeline||"",
@@ -2517,10 +2610,19 @@ function importTemuanUpdate(payload){
         status:inc.status||"open", progres:inc.progres||"", bukti:inc.bukti||"",
         foto:null, fotoTemuan:null, created, updated:now,
         log:[{t:created,msg:"Temuan dicatat dari "+(payload.visit||"Kunjungan CEO")+(inc.visitDate?" ("+fmtDate(inc.visitDate)+")":"")}]
-      });
+      };
+      db.items.push(addedItem);
+      touchedIds.add(String(addedItem.id));
       added++;
     }
   });
+  try{
+    await upsertImportedItems(db.items.filter(i=>touchedIds.has(String(i.id))));
+  }catch(err){
+    db = beforeDb;
+    toast("⚠ Impor dibatalkan karena gagal tersimpan ke Firestore: "+(err.message||"koneksi gagal"));
+    return;
+  }
   save(); renderAll();
   toast("✓ Impor pembaruan: "+updated+" diperbarui, "+added+" temuan baru"+(skipped?", "+skipped+" tanpa perubahan":""));
 }
@@ -3762,13 +3864,16 @@ function renderRvFindings(){
     </tr>`;
   }).join("") : `<tr><td colspan="10" class="empty">${rvFiltered().length? "Tidak ada temuan yang cocok dengan filter." : "Data belum terhubung — sinkronkan sistem divisi atau unggah CSV terlebih dahulu."}</td></tr>`;
   $("#rvFindCount").textContent = "Menampilkan "+Math.min(list.length,150)+" dari "+list.length+" temuan terintegrasi";
-  $$(".rv-mkcapa").forEach(b=>b.addEventListener("click", ()=>{
+  $$(".rv-mkcapa").forEach(b=>b.addEventListener("click", async ()=>{
     const [sys,rid]=b.dataset.k.split("|");
     const r = db.reviewData.find(x=>x.source_system===sys&&x.source_record_id===rid); if(!r) return;
     if(!confirm("Angkat temuan ini menjadi CAPA di Temuan & CAPA?")) return;
     const now=new Date().toISOString(); const p=paramOf(r.parameter);
     const id="t"+Date.now();
-    db.items.push({id, outlet:r.outlet_id, temuan:"["+(p?p.name:r.parameter)+"] "+r.finding, ca:"", pa:"", timeline:"", divisi:r.team, pic:"", vendor:"", status:"open", progres:"", bukti:r.evidence_url||"", foto:null, fotoTemuan:null, created:now, updated:now, log:[{t:now,msg:"Dibuat dari temuan terintegrasi ("+(sysOf(sys)||{name:sys}).name+", "+fmtDate(r.review_date)+")"}]});
+    const item = {id, outlet:r.outlet_id, temuan:"["+(p?p.name:r.parameter)+"] "+r.finding, ca:"", pa:"", timeline:"", divisi:r.team, pic:"", vendor:"", status:"open", progres:"", bukti:r.evidence_url||"", foto:null, fotoTemuan:null, created:now, updated:now, log:[{t:now,msg:"Dibuat dari temuan terintegrasi ("+(sysOf(sys)||{name:sys}).name+", "+fmtDate(r.review_date)+")"}]};
+    try{ await persistItemDocument(item, null); }
+    catch(err){ toast("⚠ CAPA belum dibuat di Firestore: "+(err.message||"koneksi gagal")); return; }
+    db.items.push(item);
     r.capaId=id; save(); renderAll(); toast("✓ CAPA dibuat dari temuan terintegrasi");
   }));
 }
@@ -3855,19 +3960,30 @@ async function migratePendingUploads(batch){
     const limit = batch || 8;
     for(const it of db.items){
       if(done >= limit) break;
+      const next = cloneData(it);
+      let itemDone = 0;
       for(const [field, flag] of [["fotoTemuan","fotoTemuanPendingUpload"],["foto","fotoPendingUpload"]]){
         if(done >= limit) break;
-        const v = String(it[field]||"");
-        if(!v.startsWith("data:")) { if(it[flag]) delete it[flag]; continue; }
+        const v = String(next[field]||"");
+        if(!v.startsWith("data:")) { if(next[flag]) delete next[flag]; continue; }
         try{
-          const res = await gcsUploadDataUrl(v, {kind: field==="foto"?"bukti-perbaikan":"foto-temuan", itemId: it.id, outlet: it.outlet});
-          it[field] = res.url;
-          it[field+"Path"] = res.path;
-          delete it[flag];
-          it.updated = new Date().toISOString();
-          (it.log=it.log||[]).push({t:it.updated, msg:"Foto dimigrasikan ke Cloud Storage ("+res.path+")"});
-          done++;
+          const res = await gcsUploadDataUrl(v, {kind: field==="foto"?"bukti-perbaikan":"foto-temuan", itemId: next.id, outlet: next.outlet});
+          next[field] = res.url;
+          next[field+"Path"] = res.path;
+          delete next[flag];
+          next.updated = new Date().toISOString();
+          (next.log=next.log||[]).push({t:next.updated, msg:"Foto dimigrasikan ke Cloud Storage ("+res.path+")"});
+          itemDone++;
         }catch(e){ /* biarkan utk percobaan berikutnya */ }
+      }
+      if(itemDone){
+        try{
+          await persistItemDocument(next, it.updated);
+          Object.assign(it, next);
+          done += itemDone;
+        }catch(e){
+          console.warn("Foto tidak diterapkan karena dokumen temuan berubah:", e);
+        }
       }
     }
     if(done){ save(); toast("☁️ "+done+" foto dimigrasikan ke Cloud Storage"); renderGcsPanel(); }

@@ -31,12 +31,20 @@ service cloud.firestore {
       allow read: if true;
       allow write: if request.resource.data.keys().hasOnly(['meta', 'kpiTargets', 'schema']);
 
-      // Sub-koleksi yang dikenali aplikasi
+      // Temuan tidak boleh dihapus permanen. Aplikasi memakai field deletedAt
+      // agar data yang dihapus dari tampilan tetap dapat dipulihkan.
+      match /items/{docId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.size() < 60;
+        allow delete: if false;
+      }
+
+      // Sub-koleksi lain yang dikenali aplikasi
       match /{sub}/{docId} {
         allow read: if true;
-        allow write: if sub in ['items', 'audits', 'users', 'acts', 'kpiEntries', 'reviewData', 'integrations']
+        allow write: if sub in ['audits', 'users', 'acts', 'kpiEntries', 'reviewData', 'integrations']
                      && request.resource.data.size() < 60;
-        allow delete: if sub in ['items', 'audits', 'users', 'acts', 'kpiEntries', 'reviewData', 'integrations'];
+        allow delete: if sub in ['audits', 'users', 'acts', 'kpiEntries', 'reviewData', 'integrations'];
       }
     }
 
