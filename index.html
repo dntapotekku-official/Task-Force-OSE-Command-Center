@@ -649,22 +649,21 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
     </div>
     <div class="data-card">
       <h4>☁️ Penyimpanan Foto — Google Cloud Storage</h4>
-      <p style="font-size:12px;color:var(--ink-soft)">Bila aktif, foto temuan & bukti diunggah ke bucket Google Cloud Storage (pola <code>uploads/TAHUN/BULAN/TANGGAL/uuid.jpg</code>, maks 5 MB, jpg/png/webp) dan tersimpan sebagai URL — dokumen data jadi ringan. Tanpa kredensial di browser; akses diatur lewat Storage Rules di Firebase Console. Foto lama (base64) tetap tampil normal.</p>
+      <p style="font-size:12px;color:var(--ink-soft)">Semua foto diunggah ke bucket Google Cloud Storage <code>task-force</code> melalui Cloud Run signer (pola <code>uploads/TAHUN/BULAN/TANGGAL/uuid.jpg</code>, maks 5 MB, jpg/png/webp) dan disimpan sebagai URL. Tidak ada penyimpanan sementara atau fallback. Foto base64 lama tetap dapat ditampilkan.</p>
       <div id="gcsStatus" style="font-size:12.5px;margin:6px 0"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input type="text" id="gcsBucket" placeholder="Nama bucket" value="task-force" style="flex:1;min-width:180px">
+        <input type="text" id="gcsBucket" value="task-force" readonly style="flex:1;min-width:180px">
         <button class="btn btn-ghost" id="btnGcsTest">🧪 Uji & Aktifkan</button>
-        <button class="btn btn-ghost" id="btnGcsMigrate" style="display:none">☁️ Migrasikan foto tertunda</button>
-        <button class="btn btn-ghost" id="btnGcsOff" style="display:none">Nonaktifkan</button>
+        <button class="btn btn-ghost" id="btnGcsMigrate" style="display:none">☁️ Migrasikan foto lama</button>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
-        <input type="text" id="gcsSignEndpoint" placeholder="Endpoint signer Cloud Run (kosongkan = mode Firebase SDK)" style="flex:1;min-width:260px">
+        <input type="text" id="gcsSignEndpoint" readonly style="flex:1;min-width:260px">
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
         <input type="text" id="appCheckKey" placeholder="reCAPTCHA v3 Site Key (App Check — produksi)" style="flex:1;min-width:220px">
         <button class="btn btn-ghost" id="btnAppCheckSave">Simpan Key</button>
       </div>
-      <p style="font-size:11.5px;color:var(--ink-faint);margin-top:6px">Prasyarat di Firebase Console (sekali saja): ① <b>Authentication</b> → aktifkan provider <b>Anonymous</b>; ② <b>Storage</b> → tautkan bucket <code>task-force</code>; ③ pasang <code>storage.rules</code> dari repo (tulis wajib login, hapus khusus admin); ④ <b>App Check</b> → daftarkan app dgn reCAPTCHA v3, tempel site key di atas, lalu aktifkan <i>Enforce</i> utk Storage.</p>
+      <p style="font-size:11.5px;color:var(--ink-faint);margin-top:6px">Prasyarat: Firebase Authentication Anonymous aktif, Cloud Run signer dapat dijangkau, service account memiliki akses ke bucket <code>task-force</code>, dan CORS bucket mengizinkan domain aplikasi.</p>
     </div>
 
     <div class="card" style="margin-top:14px">
@@ -1037,8 +1036,14 @@ const firebaseConfig = {
   appId: "1:380412737055:web:761de8e4ac6738b377c72a",
   measurementId: "G-DGC8DFSKMC"
 };
+/* Bucket foto operasional yang sudah dipakai menu Temuan dan menu berfoto lainnya.
+   Ini sengaja terpisah dari storageBucket pada firebaseConfig: Firebase tetap dipakai
+   untuk Auth/Firestore, sedangkan seluruh foto aplikasi disimpan di gs://task-force. */
+const PHOTO_STORAGE_DEFAULT = Object.freeze({
+  bucket: "task-force",
+  signEndpoint: "https://task-force-gcs-upload-signer-2foziyou6q-et.a.run.app/sign-upload"
+});
 let firebaseApi = null;
-let storageApi = null;      // SDK Firebase Storage (Google Cloud Storage)
 let firebaseAuthUser = null; // sesi Firebase Auth anonim (izin tulis Storage)
 let appCheckApi = null;      // modul App Check
 let appCheckInited = false;
@@ -1051,7 +1056,7 @@ const firebaseState = { status:"idle", message:"Firebase belum diinisialisasi." 
    Dipakai untuk menulis HANYA dokumen yang diubah sesi ini. Tanpa ini, setiap save
    menulis-ulang seluruh koleksi dari salinan memori — sesi lain yang datanya basi
    akan menimpa foto/perubahan yang baru diunggah rekan (akar masalah foto hilang). */
-const APP_VERSION = 16; // dinaikkan tiap rilis yang mengubah cara simpan
+const APP_VERSION = 17; // dinaikkan tiap rilis yang mengubah cara simpan
 let appStale = false;   // true bila cloud menandai versi minimum lebih baru → tab ini dikunci tulis
 let cloudShadow = null;
 function stableStringify(v){
@@ -1164,14 +1169,12 @@ async function initFirebase(){
       { initializeApp },
       { getAnalytics, isSupported },
       { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc, onSnapshot, runTransaction },
-      { getStorage, ref: sRef, uploadString, getDownloadURL, deleteObject },
       { getAuth, signInAnonymously, onAuthStateChanged },
       appCheckMod
     ] = await Promise.all([
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js"),
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js"),
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js"),
-      import("https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js"),
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js"),
       import("https://www.gstatic.com/firebasejs/12.16.0/firebase-app-check.js").catch(()=>null)
     ]);
@@ -1189,7 +1192,7 @@ async function initFirebase(){
     // ---- Firebase Authentication: sesi anonim utk izin tulis Storage ----
     try{
       const auth = getAuth(app);
-      onAuthStateChanged(auth, u=>{ firebaseAuthUser = u || null; registerStorageAdmin(); renderGcsPanel(); });
+      onAuthStateChanged(auth, u=>{ firebaseAuthUser = u || null; renderGcsPanel(); });
       const authCredential = await signInAnonymously(auth);
       firebaseAuthUser = authCredential.user || firebaseAuthUser;
     }catch(e){
@@ -1199,8 +1202,6 @@ async function initFirebase(){
     const store = getFirestore(app);
     firebaseApi = { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, runTransaction, setDoc,
       rootRef: doc(store, FIREBASE_FS_ROOT.collection, FIREBASE_FS_ROOT.doc) };
-    // Google Cloud Storage via Firebase Storage — tanpa kredensial di browser
-    storageApi = { getStorage, sRef, uploadString, getDownloadURL, deleteObject, app };
     firebaseState.status = "ready";
     firebaseState.message = "Data disinkronkan antar perangkat melalui Cloud Firestore.";
   }catch(e){
@@ -1674,11 +1675,8 @@ function migrate(){
       lms.endpoints = Object.assign({}, lms.endpoints, {avgScore:"/api/outlet-avg-score"});
     }
   }
-  // Penyimpanan foto: default aktif via Firebase Storage SDK. Endpoint signer lama
-  // dinonaktifkan karena service tersebut sudah tidak tersedia (404).
-  if(!db.meta.fotoStorage) db.meta.fotoStorage = {enabled:true, bucket:"task-force", signEndpoint:GCS_SIGNER_DEFAULT};
-  else if(db.meta.fotoStorage.signEndpoint===undefined || db.meta.fotoStorage.signEndpoint===GCS_SIGNER_LEGACY)
-    db.meta.fotoStorage.signEndpoint = GCS_SIGNER_DEFAULT;
+  // Semua menu yang mengunggah foto memakai satu konfigurasi tetap.
+  db.meta.fotoStorage = {...(db.meta.fotoStorage||{}), enabled:true, ...PHOTO_STORAGE_DEFAULT};
   if(!db.kpi) db.kpi = {targets:{}, entries:[]};
   if(!db.kpi.targets) db.kpi.targets = {};
   if(!db.kpi.entries) db.kpi.entries = [];
@@ -2281,8 +2279,6 @@ let editing = null; // id or null (add mode)
 let editingVersion = null; // nilai updated saat modal dibuka, untuk deteksi konflik antar-tab
 let fotoData = null;        // foto bukti perbaikan
 let fotoTemuanData = null;  // foto kondisi temuan
-let fotoPending = false;        // bukti: gagal unggah, menunggu migrasi
-let fotoTemuanPending = false;  // temuan: gagal unggah, menunggu migrasi
 let fotoPathNew = null;         // path objek GCS (mode signed)
 let fotoTemuanPathNew = null;
 let fotoChanged = false;
@@ -2297,35 +2293,15 @@ function setFindingPhotoUploading(kind, active){
   if(kind==="foto") fotoUploading=active; else fotoTemuanUploading=active;
   const btn=$("#btnSave"); if(btn) btn.disabled=fotoUploading||fotoTemuanUploading;
 }
-/* ---- PENYIMPANAN FOTO: Google Cloud Storage (Firebase Storage) ----
-   Aktif bila Admin mengaktifkannya di menu Data. Foto diunggah ke bucket dengan pola
+/* ---- PENYIMPANAN FOTO: Google Cloud Storage via Cloud Run signer ----
+   Foto diunggah ke bucket operasional tetap dengan pola
    uploads/YYYY/MM/DD/uuid.ext dan disimpan sebagai URL (bukan base64) sehingga dokumen
-   Firestore ringan. Tanpa kredensial apa pun di browser — akses diatur Storage Rules. */
+   Firestore ringan. Browser tidak menyimpan kredensial GCS. */
 function fotoStorageCfg(){ return (db.meta && db.meta.fotoStorage) || {enabled:false, bucket:""}; }
-/* Storage Rules mengizinkan DELETE hanya bila UID sesi tercatat sebagai admin:
-   firestore.exists(/commandCenter/app/storageAdmins/{uid}). Saat Admin login di aplikasi,
-   UID anonim sesi ini didaftarkan; akun non-admin tidak pernah didaftarkan. */
-let storageAdminRegistered = false;
-async function registerStorageAdmin(){
-  try{
-    if(storageAdminRegistered || !firebaseApi || !firebaseAuthUser) return;
-    if(!currentUser || currentUser.role!=="admin") return;
-    const ref = firebaseApi.doc(firebaseApi.collection(firebaseApi.rootRef, "storageAdmins"), firebaseAuthUser.uid);
-    await firebaseApi.setDoc(ref, { name: currentUser.name||"admin", user: currentUser.user||"", at: new Date().toISOString() });
-    storageAdminRegistered = true;
-  }catch(e){ console.warn("Registrasi admin storage gagal:", e.message||e); }
-}
 function gcsReady(){
   const cfg = fotoStorageCfg();
-  if(!cfg.enabled) return false;
-  return cfg.signEndpoint ? true : !!storageApi;
+  return !!(cfg.enabled && cfg.bucket===PHOTO_STORAGE_DEFAULT.bucket && cfg.signEndpoint);
 }
-function gcsBucketRef(){
-  const cfg = fotoStorageCfg();
-  return cfg.bucket ? storageApi.getStorage(storageApi.app, "gs://"+cfg.bucket) : storageApi.getStorage(storageApi.app);
-}
-const GCS_SIGNER_LEGACY = "https://task-force-gcs-upload-signer-2foziyou6q-et.a.run.app/sign-upload";
-const GCS_SIGNER_DEFAULT = ""; // Firebase Storage SDK; signer kustom bersifat opsional
 function dataUrlToBlob(dataUrl){
   const [head, b64] = dataUrl.split(",");
   const mime = (/data:([^;]+)/.exec(head)||[])[1] || "image/jpeg";
@@ -2335,10 +2311,6 @@ function dataUrlToBlob(dataUrl){
 }
 function slugifyFilePart(v){
   return String(v||"x").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40) || "x";
-}
-function gcsUuid(){
-  return (crypto.randomUUID ? crypto.randomUUID() :
-    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&0x3|0x8)).toString(16);}));
 }
 const waitMs = ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function waitForFirebaseAuth(timeoutMs=5000){
@@ -2366,15 +2338,6 @@ async function fetchUploadWithRetry(url, options, attempts=3){
   }
   throw lastError || new Error("Upload gagal");
 }
-async function gcsUploadViaFirebaseSdk(dataUrl, path){
-  if(!storageApi) throw new Error("Firebase Storage belum siap");
-  if(!await waitForFirebaseAuth()) throw new Error("Sesi upload belum siap. Silakan coba lagi.");
-  const ref = storageApi.sRef(gcsBucketRef(), path);
-  await storageApi.uploadString(ref, dataUrl, "data_url");
-  const url = await storageApi.getDownloadURL(ref);
-  if(!/^https?:\/\//.test(String(url||""))) throw new Error("Firebase Storage tidak mengembalikan URL foto");
-  return {path, url};
-}
 async function gcsUploadDataUrl(dataUrl, ctx){
   if(!gcsReady()) throw new Error("STORAGE_OFF");
   const m = /^data:image\/(jpeg|jpg|png|webp);base64,/.exec(dataUrl||"");
@@ -2389,7 +2352,7 @@ async function gcsUploadDataUrl(dataUrl, ctx){
   const fileName = slugifyFilePart(c.kind||"foto")+"-"+slugifyFilePart(c.outlet||"outlet")+"-"+slugifyFilePart(c.itemId||"item")+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+"."+ext;
   const path = "uploads/"+ymd+"/"+fileName;
 
-  // Endpoint signer bersifat opsional. Bila gagal, coba Firebase Storage SDK.
+  // Bucket operasional task-force selalu diakses melalui signer yang sama oleh semua menu.
   if(cfg.signEndpoint){
     try{
       const authUser = await waitForFirebaseAuth();
@@ -2414,33 +2377,14 @@ async function gcsUploadDataUrl(dataUrl, ctx){
       if(!upRes.ok) throw new Error("Upload ke Cloud Storage gagal ("+upRes.status+")");
       return {path:signed.path||path, url:signed.publicUrl};
     }catch(signerError){
-      console.warn("Signer upload gagal; mencoba Firebase Storage SDK:", signerError.message||signerError);
-      return gcsUploadViaFirebaseSdk(dataUrl,path);
+      // Jangan beralih ke bucket Firebase lain saat signer gagal. Kegagalan harus
+      // tetap terlihat dan modal tetap terbuka sampai upload ke bucket ini berhasil.
+      const error = new Error("Layanan upload foto ke bucket task-force tidak dapat dijangkau.");
+      error.cause = signerError;
+      throw error;
     }
   }
-  return gcsUploadViaFirebaseSdk(dataUrl,path);
-}
-async function gcsDeleteByUrl(url){
-  try{
-    if(!storageApi || !url || !/^https?:/.test(url)) return;
-    const m = /\/o\/([^?]+)/.exec(url); // ambil path objek dari download URL
-    if(!m) return;
-    const path = decodeURIComponent(m[1]);
-    await storageApi.deleteObject(storageApi.sRef(gcsBucketRef(), path));
-  }catch(e){ console.warn("Hapus objek GCS gagal (diabaikan):", e.message||e); }
-}
-/* Kecilkan dataURL yang sudah ada (untuk fallback terkendali) */
-function shrinkDataUrl(dataUrl, MAX, q, cb){
-  const img = new Image();
-  img.onload = ()=>{
-    let w=img.width,h=img.height;
-    if(w>MAX||h>MAX){ const r=Math.min(MAX/w,MAX/h); w=Math.round(w*r); h=Math.round(h*r); }
-    const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
-    cv.getContext("2d").drawImage(img,0,0,w,h);
-    cb(cv.toDataURL("image/jpeg", q));
-  };
-  img.onerror = ()=>cb(dataUrl);
-  img.src = dataUrl;
+  throw new Error("Endpoint upload bucket task-force belum dikonfigurasi.");
 }
 /* Dipanggil form: kompres lalu unggah. Foto baru hanya diterima setelah Storage
    mengembalikan URL publik; tidak ada fallback dataURL untuk input baru. */
@@ -2504,8 +2448,6 @@ function openModal(id){
   $("#mBukti").value = it?it.bukti:"";
   fotoData = it?it.foto:null;
   fotoTemuanData = it?(it.fotoTemuan||null):null;
-  fotoPending = it?!!it.fotoPendingUpload:false;
-  fotoTemuanPending = it?!!it.fotoTemuanPendingUpload:false;
   fotoPathNew = it?(it.fotoPath||null):null;
   fotoTemuanPathNew = it?(it.fotoTemuanPath||null):null;
   fotoChanged = false;
@@ -2547,8 +2489,8 @@ $("#mFoto").addEventListener("change", e=>{
   fotoUploadFailed = false;
   setFindingPhotoUploading("foto",true);
   processPhoto(f, (data,st)=>{
-    if(seq!==fotoUploadSeq){ gcsDeleteByUrl(data); return; }
-    fotoData=data; fotoPending=false; fotoPathNew=(st&&st.path)||null;
+    if(seq!==fotoUploadSeq) return;
+    fotoData=data; fotoPathNew=(st&&st.path)||null;
     const p=$("#mFotoPrev"); p.src=data; p.style.display="block";
     setFindingPhotoUploading("foto",false);
   }, {kind:"bukti-perbaikan", itemId:editing||"baru", outlet:$("#mOutlet").value}, error=>{
@@ -2565,8 +2507,8 @@ $("#mFotoTemuan").addEventListener("change", e=>{
   fotoTemuanUploadFailed = false;
   setFindingPhotoUploading("temuan",true);
   processPhoto(f, (data,st)=>{
-    if(seq!==fotoTemuanUploadSeq){ gcsDeleteByUrl(data); return; }
-    fotoTemuanData=data; fotoTemuanPending=false; fotoTemuanPathNew=(st&&st.path)||null;
+    if(seq!==fotoTemuanUploadSeq) return;
+    fotoTemuanData=data; fotoTemuanPathNew=(st&&st.path)||null;
     const p=$("#mFotoTemuanPrev"); p.src=data; p.style.display="block";
     setFindingPhotoUploading("temuan",false);
   }, {kind:"foto-temuan", itemId:editing||"baru", outlet:$("#mOutlet").value}, error=>{
@@ -2600,7 +2542,6 @@ $("#btnSave").addEventListener("click", async ()=>{
     bukti:$("#mBukti").value.trim(),
     foto:(editing && !fotoChanged && latest) ? latest.foto : fotoData,
     fotoTemuan:(editing && !fotoTemuanChanged && latest) ? latest.fotoTemuan : fotoTemuanData,
-    fotoPendingUpload: fotoPending||undefined, fotoTemuanPendingUpload: fotoTemuanPending||undefined,
     fotoPath:(editing && !fotoChanged && latest) ? latest.fotoPath : (fotoPathNew||undefined),
     fotoTemuanPath:(editing && !fotoTemuanChanged && latest) ? latest.fotoTemuanPath : (fotoTemuanPathNew||undefined)
   };
@@ -3195,13 +3136,17 @@ function renderMystery(){
       <td>${esc(v.insanku||"—")}</td>
       <td style="max-width:260px">${esc((v.gap||"—").slice(0,90))}${(v.gap||"").length>90?"…":""}</td>
       <td>${evidence||'<span class="muted">-</span>'}</td>
-      <td style="white-space:nowrap"><button class="mini-act ms-detail-btn">🔎 Detail</button>${canEditMsVisit(v)?' <button class="mini-act ms-edit-btn">✏️ Edit</button>':""}</td>
+      <td style="white-space:nowrap"><button class="mini-act ms-detail-btn">🔎 Detail</button>${canEditMsVisit(v)?' <button class="mini-act ms-edit-btn">✏️ Edit</button>':""}${canDelete()?' <button class="mini-act ms-delete-btn" style="color:var(--red)">🗑 Hapus</button>':""}</td>
     </tr>`;
   }).join("") : '<tr><td colspan="8" class="empty">Belum ada kunjungan. Tekan ＋ Input Kunjungan untuk mulai menilai.</td></tr>';
   $$("#msBody tr[data-id]").forEach(tr=>tr.addEventListener("click", ()=>openMsDetail(tr.dataset.id)));
   $$("#msBody .ms-edit-btn").forEach(btn=>btn.addEventListener("click", e=>{
     e.stopPropagation();
     openMsForm(btn.closest("tr").dataset.id);
+  }));
+  $$("#msBody .ms-delete-btn").forEach(btn=>btn.addEventListener("click", e=>{
+    e.stopPropagation();
+    deleteMsVisit(btn.closest("tr").dataset.id);
   }));
 }
 function openMsDetail(id){
@@ -3292,7 +3237,6 @@ const MS_QUESTION = {
   q8:"Setelah dilayani, apakah SSA merasa percaya untuk kembali ke outlet ini ?"
 };
 let msFotoData = null;
-let msFotoPending = false;
 let msFotoPath = null;
 let msFotoUploading = false;
 let msFotoUploadFailed = false;
@@ -3381,7 +3325,6 @@ function openMsForm(id=null){
   $("#msfVideo").value = visit ? validMsVideos(visit.videos).map(v=>v.url).join(", ") : "";
   $("#msfCoaching").value = visit ? visit.coaching||"" : "";
   msFotoData = visit ? visit.fotoUrl||"" : null;
-  msFotoPending = visit ? !!visit.fotoPendingUpload : false;
   msFotoPath = visit ? visit.fotoPath||null : null;
   msFotoUploadFailed = false;
   msFotoUploadSeq++;
@@ -3423,7 +3366,7 @@ async function saveMsForm(){
     q1:ans.q1,q2:ans.q2,q3:ans.q3,q4:ans.q4,q5:ans.q5,q6:ans.q6,q7:ans.q7,q8:ans.q8,
     score:sc.score, detail:sc.detail, alasan,
     apresiasi:$("#msfApresiasi").value.trim(), gap:$("#msfGap").value.trim(),
-    fotoUrl: msFotoData||"", fotoPendingUpload:msFotoPending||undefined, fotoPath:msFotoPath||undefined,
+    fotoUrl: msFotoData||"", fotoPath:msFotoPath||undefined,
     insanku:$("#msfInsanku").value.trim(),
     coaching:$("#msfCoaching").value.trim(), videos, updatedAt:new Date().toISOString() };
   const msTarget = (PARAMS.find(p=>p.id==="mystery_score")||{}).target||85;
@@ -3447,7 +3390,6 @@ async function saveMsForm(){
     toast("⚠ Kunjungan belum tersimpan: "+(err.message||"koneksi Firestore gagal"));
     return;
   }
-  if(existing && existing.fotoUrl && existing.fotoUrl!==v.fotoUrl) gcsDeleteByUrl(existing.fotoUrl);
   if(existing) db.msVisits[db.msVisits.findIndex(x=>x.id===id)] = v;
   else db.msVisits.push(v);
   upsertNormalized([normalizedVisit], "mystery");
@@ -3461,6 +3403,8 @@ async function saveMsForm(){
 }
 async function deleteMsVisit(id){
   if(!isAdmin()){ toast("⚠ Hanya Admin yang dapat menghapus"); return; }
+  const existing = db.msVisits.find(v=>v.id===id);
+  if(!existing){ toast("⚠ Kunjungan sudah tidak ditemukan"); return; }
   if(!confirm("Hapus kunjungan ini beserta record Review Rutin-nya?")) return;
   try{
     await Promise.all([
@@ -3475,7 +3419,7 @@ async function deleteMsVisit(id){
   db.reviewData = db.reviewData.filter(r=>!(r.source_system==="mystery_gform" && r.source_record_id===id));
   const cfg = connCfg("mystery"); if(cfg) cfg.count = db.msVisits.length;
   save(); $("#msBack").classList.remove("open"); renderMystery();
-  toast("Kunjungan dihapus");
+  toast("✓ Kunjungan dihapus");
 }
 $("#btnMsAdd") && $("#btnMsAdd").addEventListener("click", ()=>openMsForm());
 function closeMsForm(){ msFotoUploadSeq++; setMsFotoUploading(false); editingMsVisitId=null; $("#msFormBack").classList.remove("open"); }
@@ -3486,7 +3430,6 @@ $("#msfFotoRemove") && $("#msfFotoRemove").addEventListener("click", ()=>{
   msFotoUploadSeq++;
   setMsFotoUploading(false);
   msFotoData = "";
-  msFotoPending = false;
   msFotoPath = null;
   msFotoUploadFailed = false;
   const preview = $("#msfFotoPrev");
@@ -3500,8 +3443,8 @@ $("#msfFoto") && $("#msfFoto").addEventListener("change", e=>{
   msFotoUploadFailed = false;
   setMsFotoUploading(true);
   processPhoto(f, (data,st)=>{
-    if(uploadSeq!==msFotoUploadSeq){ if(/^https?:/.test(data)) gcsDeleteByUrl(data); return; }
-    msFotoData=data; msFotoPending=false; msFotoPath=(st&&st.path)||null; msFotoUploadFailed=false;
+    if(uploadSeq!==msFotoUploadSeq) return;
+    msFotoData=data; msFotoPath=(st&&st.path)||null; msFotoUploadFailed=false;
     const p=$("#msfFotoPrev"); p.src=data; p.style.display="block";
     $("#msfFotoRemove").style.display="inline-flex";
     setMsFotoUploading(false);
@@ -3841,7 +3784,7 @@ async function autoSync(){
     if(okCount) toast("⟳ Sinkron otomatis: "+okCount+" sistem diperbarui");
   } finally { autoSyncRunning = false; }
 }
-setInterval(()=>{ checkAppVersion(); autoSync(); migratePendingUploads(6); }, AUTO_SYNC_INTERVAL_MS);
+setInterval(()=>{ checkAppVersion(); autoSync(); }, AUTO_SYNC_INTERVAL_MS);
 
 async function syncAll(){
   const btn = $("#btnSyncAll");
@@ -4214,10 +4157,8 @@ function fotoCellHtml(it){
     ${th(it.fotoTemuan,"Temuan","📷")}${th(it.foto,"Bukti","🖼️")}</div>`;
 }
 
-/* ---- migrasi foto base64 → Google Cloud Storage ----
-   Menyapu item berfoto base64 (termasuk yang bertanda pending_upload) dan mengunggahnya
-   ke Storage, mengganti field menjadi URL. Berjalan per-batch agar ringan; dipicu tombol
-   di panel & menumpang siklus sinkron otomatis. */
+/* ---- migrasi manual foto base64 lama → Google Cloud Storage ----
+   Hanya berjalan saat Admin menekan tombol; upload baru tidak pernah memakai base64. */
 let migratingFotos = false;
 function pendingFotoCount(){
   let n=0;
@@ -4269,22 +4210,21 @@ function renderGcsPanel(){
   const el = $("#gcsStatus"); if(!el) return;
   const cfg = fotoStorageCfg();
   if(document.activeElement!==$("#gcsBucket")) $("#gcsBucket").value = cfg.bucket || "task-force";
-  if(document.activeElement!==$("#gcsSignEndpoint")) $("#gcsSignEndpoint").value = (cfg.signEndpoint===undefined? GCS_SIGNER_DEFAULT : cfg.signEndpoint) || "";
+  if(document.activeElement!==$("#gcsSignEndpoint")) $("#gcsSignEndpoint").value = cfg.signEndpoint || PHOTO_STORAGE_DEFAULT.signEndpoint;
   if(document.activeElement!==$("#appCheckKey")) $("#appCheckKey").value = localStorage.getItem("tf_appcheck_key") || (db.meta&&db.meta.appCheckSiteKey) || "";
-  $("#btnGcsOff").style.display = cfg.enabled ? "inline-flex" : "none";
   const pend = pendingFotoCount();
   const mig = $("#btnGcsMigrate");
   mig.style.display = (cfg.enabled && pend>0) ? "inline-flex" : "none";
-  mig.textContent = "☁️ Migrasikan "+pend+" foto tertunda";
+  mig.textContent = "☁️ Migrasikan "+pend+" foto lama";
   const authChip = firebaseAuthUser ? '<span class="chip chip-green">Auth ✓</span>' : '<span class="chip chip-red">Auth ✗ aktifkan Anonymous</span>';
   const ackChip = appCheckInited ? '<span class="chip chip-green">App Check ✓</span>' : '<span class="chip chip-gray">App Check belum</span>';
-  if(!storageApi && !cfg.signEndpoint){
-    el.innerHTML = '<span class="chip chip-red">Tidak tersedia</span> SDK Storage belum termuat (periksa koneksi), dan endpoint signer kosong.';
+  if(!cfg.signEndpoint){
+    el.innerHTML = '<span class="chip chip-red">Tidak tersedia</span> Endpoint signer GCS belum dikonfigurasi.';
   } else if(cfg.enabled){
-    const modeChip = cfg.signEndpoint ? '<span class="chip chip-blue" title="Upload via signed URL Cloud Run + verifikasi ID token">Mode: Cloud Run Signer</span>' : '<span class="chip chip-blue">Mode: Firebase SDK</span>';
+    const modeChip = '<span class="chip chip-blue" title="Upload via signed URL Cloud Run + verifikasi ID token">Mode: Cloud Run Signer</span>';
     el.innerHTML = '<span class="chip chip-green">Aktif</span> '+modeChip+' '+authChip+' '+ackChip+' Foto baru diunggah ke bucket <b>'+esc(cfg.bucket||"(bawaan project)")+'</b> sebagai URL.'+(pend?' <b>'+pend+' foto</b> menunggu migrasi.':'');
   } else {
-    el.innerHTML = '<span class="chip chip-gray">Nonaktif</span> '+authChip+' '+ackChip+' Foto saat ini disimpan base64 di Firestore.';
+    el.innerHTML = '<span class="chip chip-red">Tidak aktif</span> Konfigurasi GCS belum siap.';
   }
 }
 $("#btnGcsMigrate") && $("#btnGcsMigrate").addEventListener("click", async ()=>{
@@ -4301,28 +4241,23 @@ $("#btnAppCheckSave") && $("#btnAppCheckSave").addEventListener("click", ()=>{
   toast(k? "✓ Site key App Check disimpan — muat ulang halaman agar aktif" : "Site key dikosongkan");
 });
 async function gcsTestAndEnable(){
-  if(!storageApi){ toast("⚠ SDK Storage belum termuat"); return; }
   if(!isAdmin()){ toast("⚠ Hanya Admin yang dapat mengubah pengaturan ini"); return; }
   if(!firebaseAuthUser){ toast("⚠ Firebase Auth belum aktif — aktifkan provider Anonymous di Console → Authentication, lalu muat ulang"); return; }
-  await registerStorageAdmin(); // agar uji hapus lolos aturan admin-only
   const btn = $("#btnGcsTest"); btn.disabled = true; btn.textContent = "Menguji…";
-  const prev = fotoStorageCfg();
-  db.meta.fotoStorage = { enabled:true, bucket: $("#gcsBucket").value.trim(), signEndpoint: $("#gcsSignEndpoint").value.trim(), testedAt:null };
+  db.meta.fotoStorage = {...db.meta.fotoStorage, enabled:true, ...PHOTO_STORAGE_DEFAULT, testedAt:null};
   try{
-    // uji nyata: unggah gambar mungil (mode SDK juga menghapusnya lagi)
+    // Uji nyata dari panel Admin: unggah gambar mungil ke bucket yang sama.
     const tiny = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
     const res = await gcsUploadDataUrl(tiny, {kind:"uji-koneksi", itemId:"test", outlet:"command-center"});
-    if(!fotoStorageCfg().signEndpoint) await gcsDeleteByUrl(res.url);
     db.meta.fotoStorage.testedAt = new Date().toISOString();
     save();
     toast("✓ Google Cloud Storage aktif — foto baru akan diunggah ke bucket");
   }catch(e){
-    db.meta.fotoStorage = prev; // gagal → kembalikan
     console.warn("Uji GCS gagal:", e);
-    const msg = /storage\/unauthorized|403/i.test(String(e && (e.code||e.message))) ?
-      "Akses ditolak — pasang Storage Rules (file storage.rules) dan pastikan bucket tertaut di Firebase Console" :
-      /storage\/unknown|bucket|404/i.test(String(e && (e.code||e.message))) ?
-      "Bucket tidak ditemukan / belum ditautkan ke project Firebase" : (e.message||"kesalahan tidak dikenal");
+    const msg = /403/i.test(String(e && (e.code||e.message))) ?
+      "Akses GCS ditolak — periksa IAM service account Cloud Run" :
+      /bucket|404/i.test(String(e && (e.code||e.message))) ?
+      "Service signer atau bucket task-force tidak ditemukan" : (e.message||"kesalahan tidak dikenal");
     toast("⚠ Uji gagal: "+msg);
   }
   btn.disabled = false; btn.textContent = "🧪 Uji & Aktifkan";
@@ -4333,11 +4268,6 @@ $("#btnCnForgetKey") && $("#btnCnForgetKey").addEventListener("click", ()=>{
   forgetDeviceKey(id); renderConnKeyRow(id); toast("API key dihapus dari perangkat ini");
 });
 $("#btnGcsTest").addEventListener("click", gcsTestAndEnable);
-$("#btnGcsOff").addEventListener("click", ()=>{
-  if(!isAdmin()){ toast("⚠ Hanya Admin"); return; }
-  db.meta.fotoStorage = {enabled:false, bucket:$("#gcsBucket").value.trim()};
-  save(); renderGcsPanel(); toast("Penyimpanan foto kembali ke base64 (bawaan)");
-});
 
 /* ---- penampil foto temuan & bukti ---- */
 function openPhotoView(id){
@@ -4541,7 +4471,6 @@ function doLogin(){
   $("#loginBack").classList.remove("open");
   applyAccess(); renderAll(); switchView(firstView());
   toast("Selamat bekerja, "+u.name+" 👋");
-  registerStorageAdmin();
   setTimeout(autoSync, 800);
 }
 $("#btnLogin").addEventListener("click", doLogin);

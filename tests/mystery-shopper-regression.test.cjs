@@ -62,6 +62,7 @@ const renderSandbox = {
   currentUser:{role:"admin",user:"tester"},
   db:{msVisits:[]},
   isOutlet:()=>false, isShopper:()=>false,
+  canDelete:()=>true, deleteMsVisit(){},
   ssRefresh(){}, monthLabelID:v=>v, fmtDate:v=>v,
   shortOutletName:v=>v, esc:v=>String(v??""),
   msScoreChip:()=>"<span>100</span>", openMsForm(){}, openMsDetail(){},
@@ -80,6 +81,7 @@ renderSandbox.render();
 assert.match(renderSandbox.nodes.msBody.innerHTML, /<span class="muted">-<\/span>/, "bukti kosong harus dirender sebagai strip");
 assert.doesNotMatch(renderSandbox.nodes.msBody.innerHTML, /🎥 1/, "video kosong tidak boleh menampilkan badge");
 assert.match(renderSandbox.nodes.msBody.innerHTML, /ms-edit-btn/, "admin harus melihat tombol edit pada row");
+assert.match(renderSandbox.nodes.msBody.innerHTML, /ms-delete-btn/, "admin harus melihat tombol hapus di samping edit");
 renderSandbox.db.msVisits[0].videos = [{name:"Video 1",url:"https://video.test/1"}];
 renderSandbox.render();
 assert.match(renderSandbox.nodes.msBody.innerHTML, /🎥 1/, "satu URL valid harus menampilkan badge satu video");
@@ -105,22 +107,25 @@ assert.match(html, /await Promise\.all\(\[[\s\S]*deleteMsVisitDocument\(id\)[\s\
 assert.match(html, /answered<MS_ITEMS\.length/, "preview skor harus menunggu semua butir");
 assert.match(html, /const scopedVisits = isOutlet\(\)[\s\S]*: isShopper\(\)/, "opsi filter harus dibatasi sesuai pengguna");
 assert.match(html, /class="mini-act ms-edit-btn"/, "setiap row yang berhak harus memiliki tombol edit");
+assert.match(html, /class="mini-act ms-delete-btn"[\s\S]*deleteMsVisit\(btn\.closest\("tr"\)\.dataset\.id\)/, "tombol hapus row harus memanggil penghapusan kunjungan");
 assert.match(html, /function openMsForm\(id=null\)[\s\S]*editingMsVisitId = visit \? visit\.id : null/, "form harus mendukung mode edit");
 assert.match(html, /visit\.skenario[\s\S]*msfSkenario[\s\S]*insertAdjacentHTML/, "skenario lama di luar opsi standar harus tetap dipertahankan");
 assert.match(html, /if\(existing\) db\.msVisits\[db\.msVisits\.findIndex/, "edit harus memperbarui row, bukan menambah duplikat");
 assert.match(html, /persistMsVisitDocument\(v\), persistReviewDataDocument\(normalizedVisit\)/, "edit harus menyinkronkan kunjungan dan review terkait");
 assert.match(html, /id="msfFotoRemove"[\s\S]*msFotoData = ""/, "form edit harus dapat menghapus foto lama");
-assert.match(html, /existing\.fotoUrl!==v\.fotoUrl\) gcsDeleteByUrl/, "objek foto lama harus dibersihkan setelah perubahan tersimpan");
+assert.doesNotMatch(html, /gcsDeleteByUrl|gcsDeleteQuietly/, "browser tidak boleh memiliki jalur hapus objek GCS yang tidak terotorisasi");
 assert.match(html, /function validMsVideos\(videos\)[\s\S]*String\(f\.url\|\|""\)\.trim\(\)/, "video tanpa URL tidak boleh dianggap sebagai bukti");
 assert.match(html, /const validVideos = validMsVideos\(v\.videos\)[\s\S]*validVideos\.length/, "badge video harus menghitung URL yang benar-benar terisi");
 assert.match(html, /evidence\|\|'<span class="muted">-<\/span>'/, "kolom bukti kosong harus ditampilkan sebagai tanda strip");
 assert.match(html, /waitForFirebaseAuth\(\)[\s\S]*fetchUploadWithRetry\(cfg\.signEndpoint/, "upload harus menunggu auth dan memakai retry");
-assert.match(html, /signEndpoint===GCS_SIGNER_LEGACY[\s\S]*GCS_SIGNER_DEFAULT/, "endpoint signer 404 harus dimigrasikan ke mode SDK");
-assert.match(html, /catch\(signerError\)[\s\S]*gcsUploadViaFirebaseSdk\(dataUrl,path\)/, "kegagalan signer kustom harus mencoba Firebase Storage SDK");
-assert.match(html, /gcsUploadViaFirebaseSdk[\s\S]*getDownloadURL[\s\S]*Firebase Storage tidak mengembalikan URL foto/, "mode SDK harus memverifikasi URL hasil upload");
+assert.match(html, /PHOTO_STORAGE_DEFAULT = Object\.freeze\([\s\S]*bucket: "task-force"[\s\S]*signEndpoint:/, "semua menu foto harus memakai konfigurasi bucket operasional yang sama");
+assert.match(html, /db\.meta\.fotoStorage = \{[\s\S]*enabled:true,[\s\S]*PHOTO_STORAGE_DEFAULT/, "konfigurasi tersimpan harus dikunci kembali ke GCS operasional");
+assert.doesNotMatch(html, /GCS_SIGNER_DEFAULT/, "alias konfigurasi signer yang tidak diperlukan harus dibersihkan");
+assert.doesNotMatch(html, /gcsUploadViaFirebaseSdk|uploadString|getDownloadURL/, "uploader Firebase lama tidak boleh tersisa");
+assert.match(html, /Layanan upload foto ke bucket task-force tidak dapat dijangkau/, "kegagalan infrastruktur upload harus menjelaskan bucket tujuan");
 assert.match(html, /fetchUploadWithRetry\(url, options, attempts=3\)[\s\S]*new AbortController\(\)/, "request upload harus memiliki timeout dan retry terbatas");
 assert.match(html, /if\(msFotoUploading\)[\s\S]*Tunggu proses foto selesai/, "form tidak boleh disimpan saat foto masih diproses");
-assert.match(html, /fotoPendingUpload:msFotoPending/, "status fallback foto Mystery Shopper harus disimpan");
+assert.doesNotMatch(html, /msFotoPending|fotoPending =|fotoTemuanPending =/, "state penyimpanan sementara tidak boleh tersisa pada form aktif");
 assert.match(html, /img\.onerror[\s\S]*rd\.onerror/, "kegagalan membaca dan mendekode foto harus ditangani");
 assert.doesNotMatch(html, /Koneksi upload terganggu — foto disimpan sementara/, "foto baru tidak boleh dianggap berhasil melalui fallback sementara");
 assert.match(html, /processPhoto\(file, cb, ctx, onError\)[\s\S]*Storage tidak mengembalikan URL foto[\s\S]*if\(onError\) onError\(e\)/, "upload foto wajib menghasilkan URL Storage atau error");
@@ -129,6 +134,77 @@ assert.match(html, /if\(msFotoUploadFailed\)[\s\S]*Upload foto belum berhasil/, 
 assert.match(html, /persistItemDocument[\s\S]*closeModal\(\); renderAll\(\); toast\(successMessage\)/, "modal temuan hanya boleh ditutup dan sukses setelah persistensi");
 assert.match(html, /persistMsVisitDocument\(v\)[\s\S]*msFormBack[\s\S]*toast\("✓ Kunjungan /, "modal Mystery Shopper hanya boleh ditutup dan sukses setelah persistensi");
 assert.match(html, /item-conflict[\s\S]*Modal tetap terbuka; periksa lalu simpan ulang/, "konflik penyimpanan tidak boleh menutup modal sebagai sukses");
-assert.match(html, /const APP_VERSION = 16;/, "versi aplikasi harus dinaikkan setelah perubahan persistensi");
+assert.match(html, /const APP_VERSION = 17;/, "versi aplikasi harus dinaikkan setelah perubahan persistensi");
 
-console.log("Mystery Shopper regression tests: PASS");
+// Simulasi upload dan hapus memakai fetch mock; tidak ada request atau mutasi production.
+(async ()=>{
+  const uploadStart = html.indexOf("function dataUrlToBlob");
+  const uploadEnd = html.indexOf("/* Dipanggil form:", uploadStart);
+  const uploadCalls = [];
+  const uploadRuntime = {
+    Blob, atob, AbortController, setTimeout, clearTimeout, console,
+    firebaseAuthUser:{async getIdToken(){ return "test-token"; }},
+    fotoStorageCfg:()=>({enabled:true,bucket:"task-force",signEndpoint:"https://signer.test/sign-upload"}),
+    gcsReady:()=>true,
+    fetch:async (url, options)=>{
+      uploadCalls.push({url,options});
+      if(url==="https://signer.test/sign-upload") return {
+        ok:true,
+        async json(){ return {
+          uploadUrl:"https://storage-upload.test/signed",
+          publicUrl:"https://storage.googleapis.com/task-force/uploads/2026/09/01/test.jpg",
+          path:"uploads/2026/09/01/test.jpg", method:"PUT", headers:{"Content-Type":"image/png"}
+        }; }
+      };
+      return {ok:true,status:200};
+    }
+  };
+  vm.createContext(uploadRuntime);
+  vm.runInContext(html.slice(uploadStart, uploadEnd)+"\nthis.upload=gcsUploadDataUrl;", uploadRuntime);
+  const uploaded = await uploadRuntime.upload(
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    {kind:"test",itemId:"local",outlet:"mock"}
+  );
+  assert.equal(uploaded.path, "uploads/2026/09/01/test.jpg", "simulasi upload harus mengembalikan path GCS");
+  assert.equal(uploadCalls.length, 2, "upload harus terdiri dari permintaan signer dan PUT");
+
+  let failedUploadCalls = 0;
+  uploadRuntime.fetch = async ()=>{
+    failedUploadCalls++;
+    return {ok:false,status:400,async json(){return {error:"mock upload ditolak"};}};
+  };
+  await assert.rejects(
+    ()=>uploadRuntime.upload("data:image/png;base64,AAAA", {kind:"test"}),
+    /Layanan upload foto ke bucket task-force tidak dapat dijangkau/,
+    "upload gagal harus benar-benar gagal tanpa fallback"
+  );
+  assert.equal(failedUploadCalls, 1, "request upload invalid tidak boleh diteruskan ke jalur lain");
+
+  const deleteStart = html.lastIndexOf("async function deleteMsVisit");
+  const deleteEnd = html.indexOf('$("#btnMsAdd")', deleteStart);
+  const deleted = [];
+  const deleteToasts = [];
+  const deleteRuntime = {
+    db:{
+      msVisits:[{id:"ms-local",fotoUrl:"https://storage.googleapis.com/task-force/uploads/test.jpg"}],
+      reviewData:[{source_system:"mystery_gform",source_record_id:"ms-local"}]
+    },
+    isAdmin:()=>true, confirm:()=>true,
+    deleteMsVisitDocument:async id=>deleted.push("visit:"+id),
+    deleteReviewDataDocument:async (source,id)=>deleted.push("review:"+source+":"+id),
+    connCfg:()=>({count:1}), save(){}, renderMystery(){},
+    toast:message=>deleteToasts.push(message),
+    $:()=>({classList:{remove(){}}})
+  };
+  vm.createContext(deleteRuntime);
+  vm.runInContext(html.slice(deleteStart, deleteEnd)+"\nthis.removeVisit=deleteMsVisit;", deleteRuntime);
+  await deleteRuntime.removeVisit("ms-local");
+  assert.deepEqual(deleted.sort(), ["review:mystery_gform:ms-local","visit:ms-local"], "hapus harus membersihkan kedua dokumen cloud");
+  assert.equal(deleteRuntime.db.msVisits.length, 0, "row lokal harus hilang setelah cloud berhasil");
+  assert.match(deleteToasts.at(-1), /Kunjungan dihapus/, "hapus sukses harus memberi konfirmasi");
+
+  console.log("Mystery Shopper regression tests: PASS");
+})().catch(error=>{
+  console.error(error);
+  process.exitCode = 1;
+});
