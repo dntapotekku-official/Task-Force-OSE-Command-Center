@@ -97,11 +97,18 @@ assert.equal(uploadSandbox.retryable(429), true, "rate limit upload harus dicoba
 assert.equal(uploadSandbox.retryable(503), true, "gangguan server upload harus dicoba ulang");
 assert.equal(uploadSandbox.retryable(400), false, "request upload tidak valid tidak boleh diulang tanpa batas");
 
-// Kontrak persistensi: aturan mengizinkan koleksi dan UI menunggu cloud.
-assert.match(rules, /allow write:[^;]*'msVisits'/s, "msVisits belum diizinkan untuk ditulis");
-assert.match(rules, /allow delete:[^;]*'msVisits'/s, "msVisits belum diizinkan untuk dihapus");
+// Kontrak persistensi: seluruh data bisnis wajib soft delete.
+assert.match(rules, /match \/msVisits\/\{docId\}[\s\S]*allow create, update:[\s\S]*allow delete: if false/, "msVisits harus dapat diarsipkan tetapi tidak hard delete");
+assert.match(rules, /match \/reviewData\/\{docId\}[\s\S]*allow create, update:[\s\S]*allow delete: if false/, "reviewData harus dapat diarsipkan tetapi tidak hard delete");
+assert.doesNotMatch(html, /firebaseApi\.deleteDoc|[\s{,]deleteDoc[,\s}]/, "aplikasi tidak boleh memiliki operasi hard delete Firestore");
 assert.match(html, /await Promise\.all\(\[persistMsVisitDocument\(v\), persistReviewDataDocument\(normalizedVisit\)\]\)[\s\S]*toast\("✓ Kunjungan /, "toast sukses harus sesudah persistensi");
-assert.match(html, /await Promise\.all\(\[[\s\S]*deleteMsVisitDocument\(id\)[\s\S]*deleteReviewDataDocument\("mystery_gform", id\)[\s\S]*db\.msVisits = db\.msVisits\.filter/, "hapus lokal harus sesudah hapus cloud");
+assert.match(html, /await Promise\.all\(\[[\s\S]*archiveMsVisitDocument\(existing, deletedAt\)[\s\S]*archiveReviewDataDocument\(existingReview, deletedAt\)[\s\S]*db\.msVisits = db\.msVisits\.filter/, "hapus lokal harus sesudah arsip cloud");
+assert.match(html, /const activeRows = rows=>[\s\S]*!row\.deletedAt[\s\S]*users: activeRows\(users\)[\s\S]*entries: activeRows\(kpiEntries\)[\s\S]*msVisits: activeRows\(msRows\)/, "semua koleksi yang dimuat harus menyembunyikan arsip");
+assert.match(html, /Dokumen yang hilang dari snapshot lokal selalu diarsipkan[\s\S]*deletedAt:new Date\(\)\.toISOString\(\)[\s\S]*firebaseApi\.setDoc/, "sinkronisasi umum harus mengarsipkan data yang hilang");
+assert.match(html, /archiveSubcollectionDocument\("kpiEntries", entry\.id\|\|entry\.k[\s\S]*Entri KPI diarsipkan/, "hapus KPI harus memakai soft delete pada dokumen aktif");
+assert.match(html, /archiveSubcollectionDocument\("users"[\s\S]*Akun diarsipkan/, "hapus akun harus memakai soft delete");
+assert.match(html, /fotoChanged[\s\S]*archivedFiles\.push\(\{field:"foto"[\s\S]*fotoTemuanChanged[\s\S]*archivedFiles\.push\(\{field:"fotoTemuan"/, "foto Temuan yang diganti harus tetap diarsipkan");
+assert.match(html, /existing\.fotoUrl!==\(msFotoData\|\|""\)[\s\S]*archivedFiles\.push\(\{field:"fotoUrl"/, "foto Mystery Shopper yang dihapus atau diganti harus tetap diarsipkan");
 
 // Preview skor dan filter harus mengikuti kelengkapan/hak akses.
 assert.match(html, /answered<MS_ITEMS\.length/, "preview skor harus menunggu semua butir");
@@ -134,7 +141,7 @@ assert.match(html, /if\(msFotoUploadFailed\)[\s\S]*Upload foto belum berhasil/, 
 assert.match(html, /persistItemDocument[\s\S]*closeModal\(\); renderAll\(\); toast\(successMessage\)/, "modal temuan hanya boleh ditutup dan sukses setelah persistensi");
 assert.match(html, /persistMsVisitDocument\(v\)[\s\S]*msFormBack[\s\S]*toast\("✓ Kunjungan /, "modal Mystery Shopper hanya boleh ditutup dan sukses setelah persistensi");
 assert.match(html, /item-conflict[\s\S]*Modal tetap terbuka; periksa lalu simpan ulang/, "konflik penyimpanan tidak boleh menutup modal sebagai sukses");
-assert.match(html, /const APP_VERSION = 17;/, "versi aplikasi harus dinaikkan setelah perubahan persistensi");
+assert.match(html, /const APP_VERSION = 18;/, "versi aplikasi harus dinaikkan setelah perubahan persistensi");
 
 // Simulasi upload dan hapus memakai fetch mock; tidak ada request atau mutasi production.
 (async ()=>{
@@ -182,7 +189,7 @@ assert.match(html, /const APP_VERSION = 17;/, "versi aplikasi harus dinaikkan se
 
   const deleteStart = html.lastIndexOf("async function deleteMsVisit");
   const deleteEnd = html.indexOf('$("#btnMsAdd")', deleteStart);
-  const deleted = [];
+  const archived = [];
   const deleteToasts = [];
   const deleteRuntime = {
     db:{
@@ -190,8 +197,8 @@ assert.match(html, /const APP_VERSION = 17;/, "versi aplikasi harus dinaikkan se
       reviewData:[{source_system:"mystery_gform",source_record_id:"ms-local"}]
     },
     isAdmin:()=>true, confirm:()=>true,
-    deleteMsVisitDocument:async id=>deleted.push("visit:"+id),
-    deleteReviewDataDocument:async (source,id)=>deleted.push("review:"+source+":"+id),
+    archiveMsVisitDocument:async visit=>archived.push("visit:"+visit.id),
+    archiveReviewDataDocument:async record=>archived.push("review:"+record.source_system+":"+record.source_record_id),
     connCfg:()=>({count:1}), save(){}, renderMystery(){},
     toast:message=>deleteToasts.push(message),
     $:()=>({classList:{remove(){}}})
@@ -199,9 +206,30 @@ assert.match(html, /const APP_VERSION = 17;/, "versi aplikasi harus dinaikkan se
   vm.createContext(deleteRuntime);
   vm.runInContext(html.slice(deleteStart, deleteEnd)+"\nthis.removeVisit=deleteMsVisit;", deleteRuntime);
   await deleteRuntime.removeVisit("ms-local");
-  assert.deepEqual(deleted.sort(), ["review:mystery_gform:ms-local","visit:ms-local"], "hapus harus membersihkan kedua dokumen cloud");
-  assert.equal(deleteRuntime.db.msVisits.length, 0, "row lokal harus hilang setelah cloud berhasil");
-  assert.match(deleteToasts.at(-1), /Kunjungan dihapus/, "hapus sukses harus memberi konfirmasi");
+  assert.deepEqual(archived.sort(), ["review:mystery_gform:ms-local","visit:ms-local"], "hapus harus mengarsipkan kedua dokumen cloud");
+  assert.equal(deleteRuntime.db.msVisits.length, 0, "row lokal harus hilang setelah arsip cloud berhasil");
+  assert.match(deleteToasts.at(-1), /Kunjungan diarsipkan/, "arsip sukses harus memberi konfirmasi");
+
+  const archiveStart = html.indexOf("async function archiveSubcollectionDocument");
+  const archiveEnd = html.indexOf("function itemConflict", archiveStart);
+  let archivedPayload = null;
+  const archiveRuntime = {
+    cloudReadOk:true, appStale:false,
+    cloudShadow:{cols:{users:{"u-test":"old"}}},
+    cloneData:value=>JSON.parse(JSON.stringify(value)),
+    stripUndefined:value=>value,
+    firebaseApi:{
+      rootRef:{},
+      collection:()=>({}),
+      doc:(_collection,id)=>({id}),
+      setDoc:async (_ref,payload)=>{ archivedPayload=payload; }
+    }
+  };
+  vm.createContext(archiveRuntime);
+  vm.runInContext(html.slice(archiveStart, archiveEnd)+"\nthis.archive=archiveSubcollectionDocument;", archiveRuntime);
+  await archiveRuntime.archive("users", "u-test", {id:"u-test",name:"Akun Test"}, "2026-09-01T00:00:00.000Z");
+  assert.equal(archivedPayload.deletedAt, "2026-09-01T00:00:00.000Z", "soft delete umum harus menyimpan deletedAt");
+  assert.equal(archiveRuntime.cloudShadow.cols.users["u-test"], undefined, "arsip tidak boleh diproses ulang sebagai hard delete");
 
   console.log("Mystery Shopper regression tests: PASS");
 })().catch(error=>{

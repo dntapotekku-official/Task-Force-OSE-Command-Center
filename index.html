@@ -1056,7 +1056,7 @@ const firebaseState = { status:"idle", message:"Firebase belum diinisialisasi." 
    Dipakai untuk menulis HANYA dokumen yang diubah sesi ini. Tanpa ini, setiap save
    menulis-ulang seluruh koleksi dari salinan memori — sesi lain yang datanya basi
    akan menimpa foto/perubahan yang baru diunggah rekan (akar masalah foto hilang). */
-const APP_VERSION = 17; // dinaikkan tiap rilis yang mengubah cara simpan
+const APP_VERSION = 18; // dinaikkan tiap rilis yang mengubah cara simpan
 let appStale = false;   // true bila cloud menandai versi minimum lebih baru → tab ini dikunci tulis
 let cloudShadow = null;
 function stableStringify(v){
@@ -1168,7 +1168,7 @@ async function initFirebase(){
     const [
       { initializeApp },
       { getAnalytics, isSupported },
-      { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc, onSnapshot, runTransaction },
+      { getFirestore, doc, getDoc, setDoc, collection, getDocs, onSnapshot, runTransaction },
       { getAuth, signInAnonymously, onAuthStateChanged },
       appCheckMod
     ] = await Promise.all([
@@ -1200,7 +1200,7 @@ async function initFirebase(){
       firebaseAuthUser = null;
     }
     const store = getFirestore(app);
-    firebaseApi = { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, runTransaction, setDoc,
+    firebaseApi = { collection, doc, getDoc, getDocs, onSnapshot, runTransaction, setDoc,
       rootRef: doc(store, FIREBASE_FS_ROOT.collection, FIREBASE_FS_ROOT.doc) };
     firebaseState.status = "ready";
     firebaseState.message = "Data disinkronkan antar perangkat melalui Cloud Firestore.";
@@ -1222,16 +1222,17 @@ async function loadFirestoreDb(){
   const [items, audits, users, actsRows, kpiEntries, reviewRows, integRows, msRows] = await Promise.all(
     FS_COLLECTIONS.map(([name])=>fetchSubcollectionDocs(name))
   );
+  const activeRows = rows=>(rows||[]).filter(row=>!row.deletedAt).map(cloneData);
   const data = {
     meta: cloneData(root.meta || {visit:VISIT_LABEL}),
-    items: items.map(cloneData).filter(item=>!item.deletedAt),
-    audits: audits.map(cloneData),
-    users: users.map(cloneData),
-    acts: fromActsArray(actsRows),
-    kpi: { targets: cloneData(root.kpiTargets || {}), entries: kpiEntries.map(cloneData) },
-    reviewData: reviewRows.map(row=>{ const c=cloneData(row); delete c.id; return c; }),
-    integrations: integRows.map(cloneData),
-    msVisits: msRows.map(cloneData)
+    items: activeRows(items),
+    audits: activeRows(audits),
+    users: activeRows(users),
+    acts: fromActsArray(activeRows(actsRows)),
+    kpi: { targets: cloneData(root.kpiTargets || {}), entries: activeRows(kpiEntries) },
+    reviewData: reviewRows.filter(row=>!row.deletedAt).map(row=>{ const c=cloneData(row); delete c.id; return c; }),
+    integrations: activeRows(integRows),
+    msVisits: activeRows(msRows)
   };
   const hasData = !!(
     data.items.length || data.audits.length || data.users.length || Object.keys(data.acts).length ||
@@ -1268,17 +1269,21 @@ async function persistReviewDataDocument(record){
   const shadowCol = (cloudShadow.cols.reviewData = cloudShadow.cols.reviewData || {});
   shadowCol[String(payload.id)] = stableStringify(payload);
 }
-async function deleteMsVisitDocument(id){
-  if(!firebaseApi || !cloudReadOk || appStale) throw new Error("Firestore belum siap untuk menghapus kunjungan.");
-  await firebaseApi.deleteDoc(msVisitDocRef(id));
-  if(cloudShadow && cloudShadow.cols.msVisits) delete cloudShadow.cols.msVisits[String(id)];
+async function archiveMsVisitDocument(visit, deletedAt){
+  return archiveSubcollectionDocument("msVisits", visit.id, {...visit, updatedAt:deletedAt}, deletedAt);
 }
-async function deleteReviewDataDocument(sourceSystem, sourceRecordId){
-  if(!firebaseApi || !cloudReadOk || appStale) throw new Error("Firestore belum siap untuk menghapus data review.");
-  const record = {source_system:sourceSystem, source_record_id:sourceRecordId};
+async function archiveReviewDataDocument(record, deletedAt){
   const id = reviewDataDocId(record);
-  await firebaseApi.deleteDoc(reviewDataDocRef(record));
-  if(cloudShadow && cloudShadow.cols.reviewData) delete cloudShadow.cols.reviewData[id];
+  return archiveSubcollectionDocument("reviewData", id, {...record, updated_at:deletedAt}, deletedAt);
+}
+async function archiveSubcollectionDocument(name, id, record, deletedAt=new Date().toISOString()){
+  if(!firebaseApi || !cloudReadOk || appStale) throw new Error("Firestore belum siap untuk mengarsipkan data.");
+  const payload = stripUndefined(cloneData({...(record||{}), deletedAt}));
+  await firebaseApi.setDoc(
+    firebaseApi.doc(firebaseApi.collection(firebaseApi.rootRef, name), String(id)),
+    payload
+  );
+  if(cloudShadow && cloudShadow.cols[name]) delete cloudShadow.cols[name][String(id)];
 }
 function itemConflict(message){
   const err = new Error(message);
@@ -1303,7 +1308,7 @@ async function persistItemDocument(item, expectedUpdated){
   const shadowCol = (cloudShadow.cols.items = cloudShadow.cols.items || {});
   shadowCol[String(payload.id)] = stableStringify(payload);
 }
-async function deleteItemDocument(id, expectedUpdated){
+async function archiveItemDocument(id, expectedUpdated){
   if(!firebaseApi || !cloudReadOk || appStale) throw new Error("Firestore belum siap untuk menghapus temuan.");
   const ref = itemDocRef(id);
   await firebaseApi.runTransaction(ref.firestore, async tx=>{
@@ -1348,12 +1353,15 @@ async function syncSubcollection(name, rows){
         .catch(err=>({failedId:id, err}))
     );
   });
-  // hapus HANYA dokumen yang sesi ini kenal (ada di shadow) dan memang dihapus lokal.
-  // Dokumen baru buatan sesi lain (tak dikenal sesi ini) TIDAK pernah ikut terhapus.
+  // Dokumen yang hilang dari snapshot lokal selalu diarsipkan, tidak pernah dihapus fisik.
+  // Dokumen baru dari sesi lain yang belum ada di shadow tidak ikut disentuh.
   Object.keys(shadowCol).forEach(id=>{
     if(wanted.has(id)) return;
+    let previous = {};
+    try{ previous = JSON.parse(shadowCol[id]); }catch(_){}
+    const archived = stripUndefined({...previous, deletedAt:new Date().toISOString()});
     ops.push(
-      firebaseApi.deleteDoc(firebaseApi.doc(collRef, id))
+      firebaseApi.setDoc(firebaseApi.doc(collRef, id), archived)
         .then(()=>{ delete shadowCol[id]; })
         .catch(err=>({failedId:id, err}))
     );
@@ -2557,6 +2565,11 @@ $("#btnSave").addEventListener("click", async ()=>{
     if(!changes.length) changes.push("data diperbarui");
     const next = cloneData(it);
     Object.assign(next, vals, {updated:now});
+    next.archivedFiles = Array.isArray(next.archivedFiles) ? next.archivedFiles : [];
+    if(fotoChanged && it.foto && it.foto!==vals.foto)
+      next.archivedFiles.push({field:"foto", url:it.foto, path:it.fotoPath||"", deletedAt:now});
+    if(fotoTemuanChanged && it.fotoTemuan && it.fotoTemuan!==vals.fotoTemuan)
+      next.archivedFiles.push({field:"fotoTemuan", url:it.fotoTemuan, path:it.fotoTemuanPath||"", deletedAt:now});
     next.log = next.log||[];
     next.log.push({t:now, msg:changes.join("; ")});
     await persistItemDocument(next, editingVersion);
@@ -2588,21 +2601,21 @@ $("#btnSave").addEventListener("click", async ()=>{
 
 $("#btnDelete").addEventListener("click", async ()=>{
   if(!editing || !canDelete()){ toast("⚠ Hanya Admin yang dapat menghapus temuan"); return; }
-  if(!confirm("Hapus temuan ini secara permanen?")) return;
+  if(!confirm("Arsipkan temuan ini? Data tetap tersimpan dan tidak tampil di aplikasi.")) return;
   const btn = $("#btnDelete");
   btn.disabled = true;
   try{
-    await deleteItemDocument(editing, editingVersion);
+    await archiveItemDocument(editing, editingVersion);
     db.meta.deletedIds = (db.meta.deletedIds||[]).concat([{id:editing, t:new Date().toISOString()}]).slice(-500);
     db.items = db.items.filter(x=>x.id!==editing);
-    save(); closeModal(); renderAll(); toast("Temuan dihapus");
+    save(); closeModal(); renderAll(); toast("✓ Temuan diarsipkan");
   }catch(err){
     console.warn("Hapus temuan gagal:", err);
     if(err && err.code==="item-conflict"){
       await refreshFromCloud({render:true});
       closeModal();
       toast("⚠ Temuan berubah di perangkat lain, sehingga penghapusan dibatalkan.");
-    } else toast("⚠ Temuan tidak terhapus dari Firestore: "+(err.message||"koneksi gagal"));
+    } else toast("⚠ Temuan belum diarsipkan: "+(err.message||"koneksi gagal"));
   }finally{ btn.disabled = false; }
 });
 $("#btnCancel").addEventListener("click", closeModal);
@@ -3360,15 +3373,19 @@ async function saveMsForm(){
   if(editingMsVisitId && (!existing || !canEditMsVisit(existing))) return toast("⚠ Kunjungan tidak dapat diedit");
   const id = existing ? existing.id : "msi-"+Date.now();
   const alasan = MS_ITEMS.map(it=>$("#msfAlasan_"+it.key).value.trim());
+  const updatedAt = new Date().toISOString();
+  const archivedFiles = existing && Array.isArray(existing.archivedFiles) ? cloneData(existing.archivedFiles) : [];
+  if(existing && existing.fotoUrl && existing.fotoUrl!==(msFotoData||""))
+    archivedFiles.push({field:"fotoUrl", url:existing.fotoUrl, path:existing.fotoPath||"", deletedAt:updatedAt});
   const v = { ...(existing||{}), id, row:existing?existing.row:null, submittedAt:existing?existing.submittedAt:new Date().toISOString(),
     email:existing?existing.email:(currentUser&&(currentUser.user||currentUser.name))||"", source:existing?existing.source||"input-langsung":"input-langsung",
     outlet, outletAsli:outlet, tanggal, waktu:$("#msfWaktu").value, skenario:$("#msfSkenario").value,
     q1:ans.q1,q2:ans.q2,q3:ans.q3,q4:ans.q4,q5:ans.q5,q6:ans.q6,q7:ans.q7,q8:ans.q8,
     score:sc.score, detail:sc.detail, alasan,
     apresiasi:$("#msfApresiasi").value.trim(), gap:$("#msfGap").value.trim(),
-    fotoUrl: msFotoData||"", fotoPath:msFotoPath||undefined,
+    fotoUrl: msFotoData||"", fotoPath:msFotoPath||undefined, archivedFiles,
     insanku:$("#msfInsanku").value.trim(),
-    coaching:$("#msfCoaching").value.trim(), videos, updatedAt:new Date().toISOString() };
+    coaching:$("#msfCoaching").value.trim(), videos, updatedAt };
   const msTarget = (PARAMS.find(p=>p.id==="mystery_score")||{}).target||85;
   const normalizedVisit = {
     source_system:"mystery_gform", source_record_id:id,
@@ -3405,21 +3422,24 @@ async function deleteMsVisit(id){
   if(!isAdmin()){ toast("⚠ Hanya Admin yang dapat menghapus"); return; }
   const existing = db.msVisits.find(v=>v.id===id);
   if(!existing){ toast("⚠ Kunjungan sudah tidak ditemukan"); return; }
-  if(!confirm("Hapus kunjungan ini beserta record Review Rutin-nya?")) return;
+  if(!confirm("Arsipkan kunjungan ini beserta record Review Rutin-nya? Data tetap tersimpan dan tidak tampil di aplikasi.")) return;
+  const deletedAt = new Date().toISOString();
+  const existingReview = db.reviewData.find(r=>r.source_system==="mystery_gform" && r.source_record_id===id)
+    || {source_system:"mystery_gform", source_record_id:id};
   try{
     await Promise.all([
-      deleteMsVisitDocument(id),
-      deleteReviewDataDocument("mystery_gform", id)
+      archiveMsVisitDocument(existing, deletedAt),
+      archiveReviewDataDocument(existingReview, deletedAt)
     ]);
   }catch(err){
-    toast("⚠ Kunjungan belum dihapus: "+(err.message||"koneksi Firestore gagal"));
+    toast("⚠ Kunjungan belum diarsipkan: "+(err.message||"koneksi Firestore gagal"));
     return;
   }
   db.msVisits = db.msVisits.filter(v=>v.id!==id);
   db.reviewData = db.reviewData.filter(r=>!(r.source_system==="mystery_gform" && r.source_record_id===id));
   const cfg = connCfg("mystery"); if(cfg) cfg.count = db.msVisits.length;
   save(); $("#msBack").classList.remove("open"); renderMystery();
-  toast("✓ Kunjungan dihapus");
+  toast("✓ Kunjungan diarsipkan");
 }
 $("#btnMsAdd") && $("#btnMsAdd").addEventListener("click", ()=>openMsForm());
 function closeMsForm(){ msFotoUploadSeq++; setMsFotoUploading(false); editingMsVisitId=null; $("#msFormBack").classList.remove("open"); }
@@ -4424,10 +4444,18 @@ function renderKpi(){
       <td>${e.note?esc(e.note):'<span class="muted">—</span>'}</td>
       <td><button class="del-entry" data-k="${e.k}" title="Hapus entri">🗑</button></td></tr>`;
   }).join("") : `<tr><td colspan="7" class="empty">Belum ada riwayat. Masukkan nilai KPI melalui tombol di atas.</td></tr>`;
-  $$("#kpiHistBody .del-entry").forEach(b=>b.addEventListener("click", ()=>{
-    if(!confirm("Hapus entri KPI ini?")) return;
+  $$("#kpiHistBody .del-entry").forEach(b=>b.addEventListener("click", async ()=>{
+    const entry = db.kpi.entries.find(e=>e.k===b.dataset.k);
+    if(!entry) return toast("⚠ Entri KPI sudah tidak ditemukan");
+    if(!confirm("Arsipkan entri KPI ini? Data tetap tersimpan di Firestore.")) return;
+    try{
+      await archiveSubcollectionDocument("kpiEntries", entry.id||entry.k, entry);
+    }catch(error){
+      toast("⚠ Entri KPI belum diarsipkan: "+(error.message||"koneksi Firestore gagal"));
+      return;
+    }
     db.kpi.entries = db.kpi.entries.filter(e=>e.k!==b.dataset.k);
-    save(); renderKpi(); renderReport(); toast("Entri dihapus");
+    save(); renderKpi(); renderReport(); toast("✓ Entri KPI diarsipkan");
   }));
 }
 function closeKpiModal(){ $("#kpiModalBack").classList.remove("open"); }
@@ -4575,13 +4603,19 @@ $("#umSave").addEventListener("click", ()=>{
   }
   save(); $("#userModalBack").classList.remove("open"); renderUsers(); applyAccess();
 });
-$("#umDelete").addEventListener("click", ()=>{
+$("#umDelete").addEventListener("click", async ()=>{
   const u = db.users.find(x=>x.id===userEditing); if(!u) return;
   if(u.role==="admin" && db.users.filter(x=>x.role==="admin").length<=1){ toast("⚠ Tidak bisa menghapus Admin terakhir"); return; }
   if(currentUser && currentUser.id===u.id){ toast("⚠ Tidak bisa menghapus akun yang sedang dipakai"); return; }
-  if(!confirm("Hapus akun "+u.name+"?")) return;
+  if(!confirm("Arsipkan akun "+u.name+"? Akun tidak dapat login, tetapi datanya tetap tersimpan.")) return;
+  try{
+    await archiveSubcollectionDocument("users", u.id, u);
+  }catch(error){
+    toast("⚠ Akun belum diarsipkan: "+(error.message||"koneksi Firestore gagal"));
+    return;
+  }
   db.users = db.users.filter(x=>x.id!==userEditing);
-  save(); $("#userModalBack").classList.remove("open"); renderUsers(); toast("Akun dihapus");
+  save(); $("#userModalBack").classList.remove("open"); renderUsers(); toast("✓ Akun diarsipkan");
 });
 $("#umCancel").addEventListener("click", ()=>$("#userModalBack").classList.remove("open"));
 $("#userModalClose").addEventListener("click", ()=>$("#userModalBack").classList.remove("open"));

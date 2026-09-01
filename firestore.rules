@@ -29,7 +29,8 @@ service cloud.firestore {
     // Root dokumen aplikasi
     match /commandCenter/app {
       allow read: if true;
-      allow write: if request.resource.data.keys().hasOnly(['meta', 'kpiTargets', 'schema']);
+      allow create, update: if request.resource.data.keys().hasOnly(['meta', 'kpiTargets', 'schema']);
+      allow delete: if false;
 
       // Temuan tidak boleh dihapus permanen. Aplikasi memakai field deletedAt
       // agar data yang dihapus dari tampilan tetap dapat dipulihkan.
@@ -39,12 +40,25 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Mystery Shopper dan review terkait wajib soft delete memakai deletedAt.
+      match /msVisits/{docId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.size() < 60;
+        allow delete: if false;
+      }
+
+      match /reviewData/{docId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.size() < 60;
+        allow delete: if false;
+      }
+
       // Sub-koleksi lain yang dikenali aplikasi
       match /{sub}/{docId} {
         allow read: if true;
-        allow write: if sub in ['audits', 'users', 'acts', 'kpiEntries', 'reviewData', 'integrations', 'msVisits']
-                     && request.resource.data.size() < 60;
-        allow delete: if sub in ['audits', 'users', 'acts', 'kpiEntries', 'reviewData', 'integrations', 'msVisits'];
+        allow create, update: if sub in ['audits', 'users', 'acts', 'kpiEntries', 'integrations']
+                              && request.resource.data.size() < 60;
+        allow delete: if false;
       }
     }
 
@@ -91,7 +105,8 @@ service cloud.firestore {
 //
 //     match /commandCenter/app {
 //       allow read:  if signedIn();
-//       allow write: if isAdmin() || isSSC();
+//       allow create, update: if isAdmin() || isSSC();
+//       allow delete: if false;
 //
 //       // TEMUAN & CAPA
 //       match /items/{docId} {
@@ -108,19 +123,21 @@ service cloud.firestore {
 //                           && request.resource.data.outlet == myOutlet()
 //                           && request.resource.data.status != 'verified'
 //                           && request.resource.data.divisi == resource.data.divisi);
-//         allow delete: if isAdmin();
+//         allow delete: if false;
 //       }
 //
 //       // AKUN: hanya admin
 //       match /users/{docId} {
 //         allow read:  if isAdmin();
-//         allow write: if isAdmin();
+//         allow create, update: if isAdmin();
+//         allow delete: if false;
 //       }
 //
 //       // KPI, integrasi, data review: tim SSC & admin
 //       match /{sub}/{docId} {
 //         allow read:  if signedIn();
-//         allow write: if isAdmin() || isSSC();
+//         allow create, update: if isAdmin() || isSSC();
+//         allow delete: if false;
 //       }
 //     }
 //
