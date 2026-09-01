@@ -599,7 +599,7 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
   <div class="card" style="overflow:auto">
     <table class="tbl" id="msTable">
       <thead><tr>
-        <th>Tanggal</th><th>Outlet</th><th>Skenario</th><th style="width:70px">Skor</th><th>InsanKU</th><th>Gap Terbesar</th><th style="width:120px">Bukti</th><th style="width:86px"></th>
+        <th>Tanggal</th><th>Outlet</th><th>Skenario</th><th style="width:70px">Skor</th><th>InsanKU</th><th>Gap Terbesar</th><th style="width:120px">Bukti</th><th style="width:150px"></th>
       </tr></thead>
       <tbody id="msBody"></tbody>
     </table>
@@ -764,7 +764,7 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
 <!-- Modal Input Mystery Shopper -->
 <div class="modal-back" id="msFormBack">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:860px">
-    <div class="modal-head"><h3>Input Kunjungan Mystery Shopper</h3><button class="x-btn" id="msFormClose" aria-label="Tutup">×</button></div>
+    <div class="modal-head"><h3 id="msFormTitle">Input Kunjungan Mystery Shopper</h3><button class="x-btn" id="msFormClose" aria-label="Tutup">×</button></div>
     <div class="modal-body" style="display:block">
       <div class="grid2">
         <div class="field"><label>Nama Apotek *</label><select id="msfOutlet"><option value="">— pilih outlet —</option></select></div>
@@ -787,6 +787,7 @@ select:disabled,input:disabled,textarea:disabled{background:#f2ecec;color:var(--
         <div class="field"><label>Foto struk belanja</label>
           <input type="file" id="msfFoto" accept="image/*">
           <img id="msfFotoPrev" style="display:none;max-width:140px;border-radius:8px;margin-top:6px">
+          <button type="button" class="btn btn-danger btn-sm" id="msfFotoRemove" style="display:none;margin-top:7px">🗑 Hapus foto</button>
         </div>
         <div class="field full"><label>Link video kunjungan (Drive, opsional — pisahkan koma bila lebih dari satu)</label><input id="msfVideo" placeholder="https://drive.google.com/file/d/..."></div>
         <div class="field full"><label>Hasil Coaching</label><textarea id="msfCoaching" rows="2"></textarea></div>
@@ -1050,7 +1051,7 @@ const firebaseState = { status:"idle", message:"Firebase belum diinisialisasi." 
    Dipakai untuk menulis HANYA dokumen yang diubah sesi ini. Tanpa ini, setiap save
    menulis-ulang seluruh koleksi dari salinan memori — sesi lain yang datanya basi
    akan menimpa foto/perubahan yang baru diunggah rekan (akar masalah foto hilang). */
-const APP_VERSION = 15; // dinaikkan tiap rilis yang mengubah cara simpan
+const APP_VERSION = 16; // dinaikkan tiap rilis yang mengubah cara simpan
 let appStale = false;   // true bila cloud menandai versi minimum lebih baru → tab ini dikunci tulis
 let cloudShadow = null;
 function stableStringify(v){
@@ -1189,7 +1190,8 @@ async function initFirebase(){
     try{
       const auth = getAuth(app);
       onAuthStateChanged(auth, u=>{ firebaseAuthUser = u || null; registerStorageAdmin(); renderGcsPanel(); });
-      await signInAnonymously(auth);
+      const authCredential = await signInAnonymously(auth);
+      firebaseAuthUser = authCredential.user || firebaseAuthUser;
     }catch(e){
       console.warn("Firebase Auth anonim gagal (aktifkan Anonymous di Console → Authentication):", e.code||e.message);
       firebaseAuthUser = null;
@@ -1672,9 +1674,11 @@ function migrate(){
       lms.endpoints = Object.assign({}, lms.endpoints, {avgScore:"/api/outlet-avg-score"});
     }
   }
-  // Penyimpanan foto: default GCS aktif via Cloud Run signer (deploy tim) — bisa diubah di panel Data
+  // Penyimpanan foto: default aktif via Firebase Storage SDK. Endpoint signer lama
+  // dinonaktifkan karena service tersebut sudah tidak tersedia (404).
   if(!db.meta.fotoStorage) db.meta.fotoStorage = {enabled:true, bucket:"task-force", signEndpoint:GCS_SIGNER_DEFAULT};
-  else if(db.meta.fotoStorage.signEndpoint===undefined) db.meta.fotoStorage.signEndpoint = GCS_SIGNER_DEFAULT;
+  else if(db.meta.fotoStorage.signEndpoint===undefined || db.meta.fotoStorage.signEndpoint===GCS_SIGNER_LEGACY)
+    db.meta.fotoStorage.signEndpoint = GCS_SIGNER_DEFAULT;
   if(!db.kpi) db.kpi = {targets:{}, entries:[]};
   if(!db.kpi.targets) db.kpi.targets = {};
   if(!db.kpi.entries) db.kpi.entries = [];
@@ -2283,6 +2287,16 @@ let fotoPathNew = null;         // path objek GCS (mode signed)
 let fotoTemuanPathNew = null;
 let fotoChanged = false;
 let fotoTemuanChanged = false;
+let fotoUploading = false;
+let fotoTemuanUploading = false;
+let fotoUploadFailed = false;
+let fotoTemuanUploadFailed = false;
+let fotoUploadSeq = 0;
+let fotoTemuanUploadSeq = 0;
+function setFindingPhotoUploading(kind, active){
+  if(kind==="foto") fotoUploading=active; else fotoTemuanUploading=active;
+  const btn=$("#btnSave"); if(btn) btn.disabled=fotoUploading||fotoTemuanUploading;
+}
 /* ---- PENYIMPANAN FOTO: Google Cloud Storage (Firebase Storage) ----
    Aktif bila Admin mengaktifkannya di menu Data. Foto diunggah ke bucket dengan pola
    uploads/YYYY/MM/DD/uuid.ext dan disimpan sebagai URL (bukan base64) sehingga dokumen
@@ -2310,7 +2324,8 @@ function gcsBucketRef(){
   const cfg = fotoStorageCfg();
   return cfg.bucket ? storageApi.getStorage(storageApi.app, "gs://"+cfg.bucket) : storageApi.getStorage(storageApi.app);
 }
-const GCS_SIGNER_DEFAULT = "https://task-force-gcs-upload-signer-2foziyou6q-et.a.run.app/sign-upload"; // Cloud Run (deploy: Egar)
+const GCS_SIGNER_LEGACY = "https://task-force-gcs-upload-signer-2foziyou6q-et.a.run.app/sign-upload";
+const GCS_SIGNER_DEFAULT = ""; // Firebase Storage SDK; signer kustom bersifat opsional
 function dataUrlToBlob(dataUrl){
   const [head, b64] = dataUrl.split(",");
   const mime = (/data:([^;]+)/.exec(head)||[])[1] || "image/jpeg";
@@ -2325,6 +2340,41 @@ function gcsUuid(){
   return (crypto.randomUUID ? crypto.randomUUID() :
     'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&0x3|0x8)).toString(16);}));
 }
+const waitMs = ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function waitForFirebaseAuth(timeoutMs=5000){
+  const until = Date.now()+timeoutMs;
+  while(!firebaseAuthUser && Date.now()<until) await waitMs(100);
+  return firebaseAuthUser;
+}
+function retryableUploadStatus(status){
+  return status===408 || status===425 || status===429 || status>=500;
+}
+async function fetchUploadWithRetry(url, options, attempts=3){
+  let lastError = null;
+  for(let attempt=1; attempt<=attempts; attempt++){
+    const ctl = new AbortController();
+    const timeout = setTimeout(()=>ctl.abort(), 20000);
+    try{
+      const response = await fetch(url, {...options, signal:ctl.signal});
+      if(response.ok || !retryableUploadStatus(response.status) || attempt===attempts) return response;
+      lastError = new Error("HTTP "+response.status);
+    }catch(error){
+      lastError = error;
+      if(attempt===attempts) throw error;
+    }finally{ clearTimeout(timeout); }
+    await waitMs(350*attempt);
+  }
+  throw lastError || new Error("Upload gagal");
+}
+async function gcsUploadViaFirebaseSdk(dataUrl, path){
+  if(!storageApi) throw new Error("Firebase Storage belum siap");
+  if(!await waitForFirebaseAuth()) throw new Error("Sesi upload belum siap. Silakan coba lagi.");
+  const ref = storageApi.sRef(gcsBucketRef(), path);
+  await storageApi.uploadString(ref, dataUrl, "data_url");
+  const url = await storageApi.getDownloadURL(ref);
+  if(!/^https?:\/\//.test(String(url||""))) throw new Error("Firebase Storage tidak mengembalikan URL foto");
+  return {path, url};
+}
 async function gcsUploadDataUrl(dataUrl, ctx){
   if(!gcsReady()) throw new Error("STORAGE_OFF");
   const m = /^data:image\/(jpeg|jpg|png|webp);base64,/.exec(dataUrl||"");
@@ -2335,38 +2385,40 @@ async function gcsUploadDataUrl(dataUrl, ctx){
   const ymd = now.getFullYear()+"/"+String(now.getMonth()+1).padStart(2,"0")+"/"+String(now.getDate()).padStart(2,"0");
   const cfg = fotoStorageCfg();
 
-  // ---- MODE SIGNED (utama): Cloud Run signer + Firebase Auth ID token (alur Egar) ----
-  if(cfg.signEndpoint){
-    if(!firebaseAuthUser) throw new Error("Firebase Auth belum siap (aktifkan Anonymous)");
-    const c = ctx||{};
-    const fileName = slugifyFilePart(c.kind||"foto")+"-"+slugifyFilePart(c.outlet||"outlet")+"-"+slugifyFilePart(c.itemId||"item")+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+"."+ext;
-    const path = "uploads/"+ymd+"/"+fileName;
-    const blob = dataUrlToBlob(dataUrl);
-    const idToken = await firebaseAuthUser.getIdToken();
-    const signRes = await fetch(cfg.signEndpoint, {
-      method:"POST",
-      headers:{ "Authorization":"Bearer "+idToken, "Content-Type":"application/json" },
-      body: JSON.stringify({ path, contentType: blob.type||"image/jpeg", size: blob.size,
-        metadata:{ itemId:String(c.itemId||""), outlet:String(c.outlet||""), kind:String(c.kind||"") } })
-    });
-    if(!signRes.ok){
-      let msg = "Gagal meminta izin upload ("+signRes.status+")";
-      try{ const e = await signRes.json(); if(e && e.error) msg = e.error; }catch(_){}
-      throw new Error(msg);
-    }
-    const signed = await signRes.json();
-    const upRes = await fetch(signed.uploadUrl, { method: signed.method||"PUT",
-      headers: signed.headers||{"Content-Type": blob.type||"image/jpeg"}, body: blob });
-    if(!upRes.ok) throw new Error("Upload ke Cloud Storage gagal ("+upRes.status+")");
-    return { path: signed.path||path, url: signed.publicUrl };
-  }
+  const c = ctx||{};
+  const fileName = slugifyFilePart(c.kind||"foto")+"-"+slugifyFilePart(c.outlet||"outlet")+"-"+slugifyFilePart(c.itemId||"item")+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+"."+ext;
+  const path = "uploads/"+ymd+"/"+fileName;
 
-  // ---- MODE FIREBASE SDK (cadangan bila endpoint kosong) ----
-  const path = "uploads/"+ymd+"/"+gcsUuid()+"."+ext;
-  const r = storageApi.sRef(gcsBucketRef(), path);
-  await storageApi.uploadString(r, dataUrl, "data_url");
-  const url = await storageApi.getDownloadURL(r);
-  return { path, url };
+  // Endpoint signer bersifat opsional. Bila gagal, coba Firebase Storage SDK.
+  if(cfg.signEndpoint){
+    try{
+      const authUser = await waitForFirebaseAuth();
+      if(!authUser) throw new Error("Sesi upload belum siap. Silakan coba lagi.");
+      const blob = dataUrlToBlob(dataUrl);
+      const idToken = await authUser.getIdToken();
+      const signRes = await fetchUploadWithRetry(cfg.signEndpoint, {
+        method:"POST",
+        headers:{ "Authorization":"Bearer "+idToken, "Content-Type":"application/json" },
+        body: JSON.stringify({ path, contentType: blob.type||"image/jpeg", size: blob.size,
+          metadata:{ itemId:String(c.itemId||""), outlet:String(c.outlet||""), kind:String(c.kind||"") } })
+      });
+      if(!signRes.ok){
+        let msg = "Gagal meminta izin upload ("+signRes.status+")";
+        try{ const e = await signRes.json(); if(e && e.error) msg = e.error; }catch(_){}
+        throw new Error(msg);
+      }
+      const signed = await signRes.json();
+      if(!signed.uploadUrl || !signed.publicUrl) throw new Error("Respons izin upload tidak lengkap");
+      const upRes = await fetchUploadWithRetry(signed.uploadUrl, { method: signed.method||"PUT",
+        headers: signed.headers||{"Content-Type": blob.type||"image/jpeg"}, body: blob });
+      if(!upRes.ok) throw new Error("Upload ke Cloud Storage gagal ("+upRes.status+")");
+      return {path:signed.path||path, url:signed.publicUrl};
+    }catch(signerError){
+      console.warn("Signer upload gagal; mencoba Firebase Storage SDK:", signerError.message||signerError);
+      return gcsUploadViaFirebaseSdk(dataUrl,path);
+    }
+  }
+  return gcsUploadViaFirebaseSdk(dataUrl,path);
 }
 async function gcsDeleteByUrl(url){
   try{
@@ -2390,27 +2442,30 @@ function shrinkDataUrl(dataUrl, MAX, q, cb){
   img.onerror = ()=>cb(dataUrl);
   img.src = dataUrl;
 }
-/* Dipanggil form: kompres → unggah ke GCS bila aktif.
-   Bila unggah GAGAL: TIDAK menyimpan base64 besar tanpa batas — dikompres kecil
-   (±≤150KB) dan ditandai pending_upload agar dimigrasikan otomatis ke Storage nanti. */
-function processPhoto(file, cb, ctx){
+/* Dipanggil form: kompres lalu unggah. Foto baru hanya diterima setelah Storage
+   mengembalikan URL publik; tidak ada fallback dataURL untuk input baru. */
+function processPhoto(file, cb, ctx, onError){
   compressImage(file, async data=>{
-    if(!gcsReady()){ cb(data, {pending:false}); return; }
+    if(!gcsReady()){
+      const error=new Error("Penyimpanan foto belum siap. Hubungi Admin atau coba lagi.");
+      if(onError) onError(error); else toast("⚠ "+error.message);
+      return;
+    }
     try{
       const res = await gcsUploadDataUrl(data, ctx);
+      if(!res || !/^https?:\/\//.test(String(res.url||""))) throw new Error("Storage tidak mengembalikan URL foto");
       cb(res.url, {pending:false, path:res.path});
     }catch(e){
-      console.warn("Upload GCS gagal — fallback kecil + pending_upload:", e.message||e);
-      shrinkDataUrl(data, 560, .5, small=>{
-        const use = small.length<=220*1024 ? small : null;
-        if(use){ cb(use, {pending:true}); }
-        else shrinkDataUrl(data, 420, .42, tiny=>cb(tiny, {pending:true}));
-        toast("⚠ Upload ke Cloud Storage gagal — foto disimpan sementara (versi kecil) & antre migrasi otomatis");
-      });
+      console.warn("Upload foto gagal:", e.message||e);
+      if(onError) onError(e); else toast("⚠ Upload foto gagal: "+(e.message||"koneksi bermasalah"));
     }
+  }, error=>{
+    console.warn("Foto tidak dapat diproses:", error.message||error);
+    if(onError) onError(error);
+    else toast("⚠ Foto tidak dapat dibaca. Gunakan JPG, PNG, atau WebP.");
   });
 }
-function compressImage(file, cb){
+function compressImage(file, cb, onError){
   const img = new Image();
   const rd = new FileReader();
   const LEVELS = [[900,.78],[720,.6],[560,.5],[440,.42]]; // turunkan bertahap bila masih besar
@@ -2426,7 +2481,8 @@ function compressImage(file, cb){
         if(out.length <= CAP) break;
       }
       cb(out);
-    }; img.src = rd.result; };
+    }; img.onerror = ()=>onError&&onError(new Error("Format gambar tidak dapat didekode")); img.src = rd.result; };
+  rd.onerror = ()=>onError&&onError(new Error("File gambar tidak dapat dibaca"));
   rd.readAsDataURL(file);
 }
 function openModal(id){
@@ -2454,6 +2510,12 @@ function openModal(id){
   fotoTemuanPathNew = it?(it.fotoTemuanPath||null):null;
   fotoChanged = false;
   fotoTemuanChanged = false;
+  fotoUploadFailed = false;
+  fotoTemuanUploadFailed = false;
+  fotoUploadSeq++;
+  fotoTemuanUploadSeq++;
+  setFindingPhotoUploading("foto",false);
+  setFindingPhotoUploading("temuan",false);
   $("#mFoto").value = ""; $("#mFotoTemuan").value = "";
   const prev = $("#mFotoPrev");
   if(fotoData){ prev.src=fotoData; prev.style.display="block"; } else { prev.style.display="none"; }
@@ -2472,22 +2534,54 @@ function openModal(id){
   $("#modalBack").classList.add("open");
   document.body.style.overflow="hidden";
 }
-function closeModal(){ $("#modalBack").classList.remove("open"); document.body.style.overflow=""; }
+function closeModal(){
+  fotoUploadSeq++; fotoTemuanUploadSeq++;
+  setFindingPhotoUploading("foto",false); setFindingPhotoUploading("temuan",false);
+  $("#modalBack").classList.remove("open"); document.body.style.overflow="";
+}
 
 $("#mFoto").addEventListener("change", e=>{
   const f = e.target.files[0]; if(!f) return;
+  const seq=++fotoUploadSeq;
   fotoChanged = true;
-  processPhoto(f, (data,st)=>{ fotoData=data; fotoPending=!!(st&&st.pending); fotoPathNew=(st&&st.path)||null; const p=$("#mFotoPrev"); p.src=data; p.style.display="block"; }, {kind:"bukti-perbaikan", itemId:editing||"baru", outlet:$("#mOutlet").value});
+  fotoUploadFailed = false;
+  setFindingPhotoUploading("foto",true);
+  processPhoto(f, (data,st)=>{
+    if(seq!==fotoUploadSeq){ gcsDeleteByUrl(data); return; }
+    fotoData=data; fotoPending=false; fotoPathNew=(st&&st.path)||null;
+    const p=$("#mFotoPrev"); p.src=data; p.style.display="block";
+    setFindingPhotoUploading("foto",false);
+  }, {kind:"bukti-perbaikan", itemId:editing||"baru", outlet:$("#mOutlet").value}, error=>{
+    if(seq!==fotoUploadSeq) return;
+    fotoChanged=false; fotoUploadFailed=true; $("#mFoto").value="";
+    setFindingPhotoUploading("foto",false);
+    toast("⚠ Upload foto bukti gagal: "+(error.message||"silakan pilih ulang"));
+  });
 });
 $("#mFotoTemuan").addEventListener("change", e=>{
   const f = e.target.files[0]; if(!f) return;
+  const seq=++fotoTemuanUploadSeq;
   fotoTemuanChanged = true;
-  processPhoto(f, (data,st)=>{ fotoTemuanData=data; fotoTemuanPending=!!(st&&st.pending); fotoTemuanPathNew=(st&&st.path)||null; const p=$("#mFotoTemuanPrev"); p.src=data; p.style.display="block"; }, {kind:"foto-temuan", itemId:editing||"baru", outlet:$("#mOutlet").value});
+  fotoTemuanUploadFailed = false;
+  setFindingPhotoUploading("temuan",true);
+  processPhoto(f, (data,st)=>{
+    if(seq!==fotoTemuanUploadSeq){ gcsDeleteByUrl(data); return; }
+    fotoTemuanData=data; fotoTemuanPending=false; fotoTemuanPathNew=(st&&st.path)||null;
+    const p=$("#mFotoTemuanPrev"); p.src=data; p.style.display="block";
+    setFindingPhotoUploading("temuan",false);
+  }, {kind:"foto-temuan", itemId:editing||"baru", outlet:$("#mOutlet").value}, error=>{
+    if(seq!==fotoTemuanUploadSeq) return;
+    fotoTemuanChanged=false; fotoTemuanUploadFailed=true; $("#mFotoTemuan").value="";
+    setFindingPhotoUploading("temuan",false);
+    toast("⚠ Upload foto temuan gagal: "+(error.message||"silakan pilih ulang"));
+  });
 });
 
 $("#btnSave").addEventListener("click", async ()=>{
   const btn = $("#btnSave");
   const oldHtml = btn.innerHTML;
+  if(fotoUploading||fotoTemuanUploading) return toast("⚠ Tunggu upload foto selesai");
+  if(fotoUploadFailed||fotoTemuanUploadFailed) return toast("⚠ Upload foto belum berhasil. Pilih ulang foto sebelum menyimpan.");
   const outlet = $("#mOutlet").value.trim();
   const temuan = $("#mTemuan").value.trim();
   if(!outlet || !temuan){ toast("⚠ Nama outlet dan temuan wajib diisi"); return; }
@@ -2510,6 +2604,7 @@ $("#btnSave").addEventListener("click", async ()=>{
     fotoPath:(editing && !fotoChanged && latest) ? latest.fotoPath : (fotoPathNew||undefined),
     fotoTemuanPath:(editing && !fotoTemuanChanged && latest) ? latest.fotoTemuanPath : (fotoTemuanPathNew||undefined)
   };
+  let successMessage;
   if(editing){
     const it = db.items.find(x=>x.id===editing);
     if(!it){ toast("⚠ Temuan ini sudah tidak ada di Firestore. Muat ulang halaman."); return; }
@@ -2525,21 +2620,22 @@ $("#btnSave").addEventListener("click", async ()=>{
     next.log.push({t:now, msg:changes.join("; ")});
     await persistItemDocument(next, editingVersion);
     Object.assign(it, next);
-    toast("✓ Temuan diperbarui");
+    successMessage="✓ Temuan diperbarui";
   } else {
     const next = { id:"t"+Date.now(), ...vals, created:now, updated:now,
       log:[{t:now,msg:"Temuan ditambahkan manual"}] };
     await persistItemDocument(next, null);
     db.items.push(next);
-    toast("✓ Temuan baru ditambahkan");
+    successMessage="✓ Temuan baru ditambahkan";
   }
-  save(); closeModal(); renderAll();
+  save(); closeModal(); renderAll(); toast(successMessage);
   } catch(err) {
     console.warn("Simpan temuan gagal:", err);
     if(err && err.code==="item-conflict"){
       await refreshFromCloud({render:true});
-      toast("⚠ Data berubah di perangkat lain. Data terbaru sudah dimuat; buka kembali temuan sebelum mengedit.");
-      closeModal();
+      const fresh = editing ? db.items.find(x=>x.id===editing) : null;
+      editingVersion = fresh ? String(fresh.updated||"") : editingVersion;
+      toast("⚠ Data berubah di perangkat lain. Modal tetap terbuka; periksa lalu simpan ulang.");
     } else {
       toast("⚠ Temuan belum tersimpan ke Firestore: "+(err.message||"koneksi gagal"));
     }
@@ -3056,6 +3152,13 @@ function msScoreChip(score){
   const cls = score>=t? "chip-green" : (score>=t*0.8? "chip-amber":"chip-red");
   return '<span class="chip '+cls+'">'+fmtVal(score,"")+'</span>';
 }
+function canEditMsVisit(v){
+  if(!currentUser || isOutlet()) return false;
+  return !isShopper() || v.email===(currentUser.user||currentUser.name);
+}
+function validMsVideos(videos){
+  return (Array.isArray(videos)?videos:[]).filter(f=>f && String(f.url||"").trim());
+}
 function renderMystery(){
   const body = $("#msBody"); if(!body) return;
   // opsi filter
@@ -3079,18 +3182,27 @@ function renderMystery(){
                    : db.msVisits.length;
   $("#cntMs").textContent = scopeCount;
 
-  body.innerHTML = list.length? list.map(v=>`
-    <tr data-id="${v.id}" style="cursor:pointer">
+  body.innerHTML = list.length? list.map(v=>{
+    const validVideos = validMsVideos(v.videos);
+    const evidence = (v.fotoUrl?(String(v.fotoUrl).startsWith("data:")?'🧾':'<a href="'+esc(v.fotoUrl)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">🧾 Struk</a>')+' ':"")
+      +(validVideos.length? '<span class="chip chip-blue">🎥 '+validVideos.length+'</span>':"");
+    return `
+    <tr data-id="${esc(v.id)}" style="cursor:pointer">
       <td style="white-space:nowrap">${fmtDate(v.tanggal)}${v.waktu? "<br><span class=muted style=font-size:11px>"+esc(v.waktu)+"</span>":""}</td>
       <td><b>${esc(shortOutletName(v.outlet))}</b>${v.insanku?"":""}</td>
       <td style="max-width:180px">${esc(v.skenario||"—")}</td>
       <td>${msScoreChip(v.score)}</td>
       <td>${esc(v.insanku||"—")}</td>
       <td style="max-width:260px">${esc((v.gap||"—").slice(0,90))}${(v.gap||"").length>90?"…":""}</td>
-      <td>${v.fotoUrl?(String(v.fotoUrl).startsWith("data:")?'🧾':'<a href="'+esc(v.fotoUrl)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">🧾 Struk</a>')+' ':""}${v.videos&&v.videos.length? '<span class="chip chip-blue">🎥 '+v.videos.length+'</span>':""}</td>
-      <td><button class="mini-act">🔎 Detail</button></td>
-    </tr>`).join("") : '<tr><td colspan="8" class="empty">Belum ada kunjungan. Tekan ＋ Input Kunjungan untuk mulai menilai.</td></tr>';
+      <td>${evidence||'<span class="muted">-</span>'}</td>
+      <td style="white-space:nowrap"><button class="mini-act ms-detail-btn">🔎 Detail</button>${canEditMsVisit(v)?' <button class="mini-act ms-edit-btn">✏️ Edit</button>':""}</td>
+    </tr>`;
+  }).join("") : '<tr><td colspan="8" class="empty">Belum ada kunjungan. Tekan ＋ Input Kunjungan untuk mulai menilai.</td></tr>';
   $$("#msBody tr[data-id]").forEach(tr=>tr.addEventListener("click", ()=>openMsDetail(tr.dataset.id)));
+  $$("#msBody .ms-edit-btn").forEach(btn=>btn.addEventListener("click", e=>{
+    e.stopPropagation();
+    openMsForm(btn.closest("tr").dataset.id);
+  }));
 }
 function openMsDetail(id){
   const v = db.msVisits.find(x=>x.id===id); if(!v) return;
@@ -3100,7 +3212,7 @@ function openMsDetail(id){
     <tr><td style="width:34px">${i+1}</td><td>${esc(d.label)}</td><td>${esc(d.answer)}</td>
     <td style="width:60px">${d.score===null?'<span class="muted">—</span>':d.score}</td></tr>`).join("");
   const alasan = (v.alasan||[]).filter(a=>a).map(a=>"<li>"+esc(a)+"</li>").join("");
-  const vids = (v.videos||[]).map(f=>`
+  const vids = validMsVideos(v.videos).map(f=>`
     <div style="margin:10px 0"><div class="muted" style="font-size:11.5px;margin-bottom:4px">🎥 ${esc(f.name)}</div>
     <iframe src="${esc(f.url)}" style="width:100%;aspect-ratio:16/9;border:1px solid var(--line);border-radius:10px" allow="autoplay" allowfullscreen loading="lazy"></iframe></div>`).join("");
   $("#msDetailBody").innerHTML = `
@@ -3119,15 +3231,17 @@ function openMsDetail(id){
     ${v.fotoUrl? (String(v.fotoUrl).startsWith("data:")
         ? '<div style="margin-top:12px"><b style="font-size:13px">🧾 Foto struk</b><br><img src="'+v.fotoUrl+'" style="max-width:320px;border-radius:10px;border:1px solid var(--line);margin-top:6px">'
         : '<p style="margin-top:12px"><a class="btn btn-ghost" href="'+esc(v.fotoUrl)+'" target="_blank" rel="noopener">🧾 Lihat foto struk</a></p>') : ""}
-    ${isAdmin()? '<p style="margin-top:14px"><button class="btn btn-ghost" style="color:var(--red)" onclick="deleteMsVisit(\''+v.id+'\')">🗑 Hapus kunjungan</button></p>':""}
+    ${(canEditMsVisit(v)||isAdmin())? '<p style="margin-top:14px;display:flex;gap:8px">'+(canEditMsVisit(v)?'<button class="btn btn-ghost" id="msDetailEdit">✏️ Edit kunjungan</button>':"")+(isAdmin()?'<button class="btn btn-ghost" id="msDetailDelete" style="color:var(--red)">🗑 Hapus kunjungan</button>':"")+'</p>':""}
     ${vids}`;
+  $("#msDetailEdit") && $("#msDetailEdit").addEventListener("click", ()=>editMsVisitFromDetail(v.id));
+  $("#msDetailDelete") && $("#msDetailDelete").addEventListener("click", ()=>deleteMsVisit(v.id));
   $("#msBack").classList.add("open");
 }
 let msDetailCurrent = null;
 $("#msPrint") && $("#msPrint").addEventListener("click", ()=>{
   const v = msDetailCurrent; if(!v) return;
   const rows = (v.detail||[]).map((d,i)=>`<tr><td>${i+1}</td><td>${esc(d.label)}</td><td>${esc(d.answer)}</td><td style="text-align:center">${d.score===null?"—":d.score}</td><td>${esc((v.alasan||[])[i]||"")}</td></tr>`).join("");
-  const vids = (v.videos||[]).map(f=>`<li>${esc(f.name)} — ${esc(f.url)}</li>`).join("");
+  const vids = validMsVideos(v.videos).map(f=>`<li>${esc(f.name)} — ${esc(f.url)}</li>`).join("");
   const win = window.open("", "_blank");
   if(!win){ toast("⚠ Pop-up diblokir browser — izinkan pop-up untuk mencetak"); return; }
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Mystery Shopper — ${esc(shortOutletName(v.outlet))}</title>
@@ -3178,10 +3292,26 @@ const MS_QUESTION = {
   q8:"Setelah dilayani, apakah SSA merasa percaya untuk kembali ke outlet ini ?"
 };
 let msFotoData = null;
+let msFotoPending = false;
+let msFotoPath = null;
+let msFotoUploading = false;
+let msFotoUploadFailed = false;
+let msFotoUploadSeq = 0;
+let editingMsVisitId = null;
+function setMsFotoUploading(active){
+  msFotoUploading = active;
+  const btn = $("#btnMsSave"); if(!btn) return;
+  btn.disabled = active;
+  btn.textContent = active ? "Memproses foto…" : (editingMsVisitId ? "💾 Simpan Perubahan" : "💾 Simpan Kunjungan");
+}
 function driveToPreview(url){
   const u = String(url||"").trim(); if(!u) return "";
   let m = /\/file\/d\/([\w-]+)/.exec(u) || /[?&]id=([\w-]+)/.exec(u);
   return m ? "https://drive.google.com/file/d/"+m[1]+"/preview" : u;
+}
+function msVideosFromInput(value){
+  return String(value||"").split(",").map(v=>v.trim()).filter(Boolean)
+    .map((url,i)=>({name:"Video "+(i+1), url:driveToPreview(url)}));
 }
 function msfCollectAnswers(){
   const ans = {};
@@ -3206,11 +3336,18 @@ function msfUpdateScore(){
   el.style.cssText="font-size:14px;padding:8px 14px";
   el.textContent = "Skor: "+fmtVal(score,"")+" / target "+t;
 }
-function openMsForm(){
+function openMsForm(id=null){
   if(isOutlet()){ toast("⚠ Akun outlet tidak dapat menginput penilaian"); return; }
+  const visit = id ? db.msVisits.find(v=>v.id===id) : null;
+  if(id && (!visit || !canEditMsVisit(visit))){ toast("⚠ Kunjungan tidak dapat diedit"); return; }
+  editingMsVisitId = visit ? visit.id : null;
+  $("#msFormTitle").textContent = visit ? "Edit Kunjungan Mystery Shopper" : "Input Kunjungan Mystery Shopper";
+  $("#btnMsSave").textContent = visit ? "💾 Simpan Perubahan" : "💾 Simpan Kunjungan";
   // outlet options
   const sel = $("#msfOutlet");
   sel.innerHTML = '<option value="">— pilih outlet —</option>'+OUTLETS.map(o=>`<option>${esc(o.name)}</option>`).join("");
+  if(visit && !OUTLETS.some(o=>o.name===visit.outlet)) sel.insertAdjacentHTML("beforeend", `<option>${esc(visit.outlet)}</option>`);
+  sel.value = visit ? visit.outlet : "";
   if(typeof ssRefresh==="function") ssRefresh("msfOutlet");
   // butir penilaian + alasan per butir
   $("#msfItems").innerHTML = MS_ITEMS.map((it,i)=>`
@@ -3225,14 +3362,45 @@ function openMsForm(){
       <input id="msfAlasan_${it.key}" placeholder="Alasan singkat…" style="margin-top:8px;font-size:12.5px">
     </div>`).join("");
   $$('#msfItems input[type="radio"]').forEach(r=>r.addEventListener("change", msfUpdateScore));
-  $("#msfTanggal").value = todayStr();
-  $("#msfWaktu").value = ""; $("#msfSkenario").value = "";
-  ["msfApresiasi","msfGap","msfInsanku","msfVideo","msfCoaching"].forEach(id=>$("#"+id).value="");
-  msFotoData = null; $("#msfFotoPrev").style.display="none"; $("#msfFoto").value="";
+  if(visit){
+    MS_ITEMS.forEach((it,i)=>{
+      const answer = String(visit[it.key]||"");
+      $$(`input[name="msf_${it.key}"]`).forEach(r=>{ r.checked = r.value===answer; });
+      $("#msfAlasan_"+it.key).value = (visit.alasan||[])[i]||"";
+    });
+  }
+  $("#msfTanggal").value = visit ? visit.tanggal||"" : todayStr();
+  $("#msfWaktu").value = visit ? visit.waktu||"" : "";
+  if(visit && visit.skenario && ![...$("#msfSkenario").options].some(o=>o.value===visit.skenario))
+    $("#msfSkenario").insertAdjacentHTML("beforeend", `<option>${esc(visit.skenario)}</option>`);
+  $("#msfSkenario").value = visit ? visit.skenario||"" : "";
+  if(typeof ssRefresh==="function") ssRefresh("msfSkenario");
+  $("#msfApresiasi").value = visit ? visit.apresiasi||"" : "";
+  $("#msfGap").value = visit ? visit.gap||"" : "";
+  $("#msfInsanku").value = visit ? visit.insanku||"" : "";
+  $("#msfVideo").value = visit ? validMsVideos(visit.videos).map(v=>v.url).join(", ") : "";
+  $("#msfCoaching").value = visit ? visit.coaching||"" : "";
+  msFotoData = visit ? visit.fotoUrl||"" : null;
+  msFotoPending = visit ? !!visit.fotoPendingUpload : false;
+  msFotoPath = visit ? visit.fotoPath||null : null;
+  msFotoUploadFailed = false;
+  msFotoUploadSeq++;
+  setMsFotoUploading(false);
+  const fotoPrev = $("#msfFotoPrev");
+  fotoPrev.style.display = msFotoData ? "block" : "none";
+  if(msFotoData) fotoPrev.src = msFotoData;
+  $("#msfFotoRemove").style.display = msFotoData ? "inline-flex" : "none";
+  $("#msfFoto").value="";
   msfUpdateScore();
   $("#msFormBack").classList.add("open");
 }
+function editMsVisitFromDetail(id){
+  $("#msBack").classList.remove("open");
+  openMsForm(id);
+}
 async function saveMsForm(){
+  if(msFotoUploading) return toast("⚠ Tunggu proses foto selesai");
+  if(msFotoUploadFailed) return toast("⚠ Upload foto belum berhasil. Pilih ulang atau hapus foto sebelum menyimpan.");
   const outlet = $("#msfOutlet").value;
   const tanggal = $("#msfTanggal").value;
   const ans = msfCollectAnswers();
@@ -3244,17 +3412,19 @@ async function saveMsForm(){
   if(!$("#msfGap").value.trim()) return toast("⚠ Isi Gap terbesar");
   if(!$("#msfInsanku").value.trim()) return toast("⚠ Isi nama InsanKU yang berjaga");
   const sc = msVisitScore(ans);
-  const videos = $("#msfVideo").value.split(",").map(v=>v.trim()).filter(Boolean)
-    .map((u,i)=>({name:"Video "+(i+1), url:driveToPreview(u)}));
-  const id = "msi-"+Date.now();
+  const videos = msVideosFromInput($("#msfVideo").value);
+  const existing = editingMsVisitId ? db.msVisits.find(x=>x.id===editingMsVisitId) : null;
+  if(editingMsVisitId && (!existing || !canEditMsVisit(existing))) return toast("⚠ Kunjungan tidak dapat diedit");
+  const id = existing ? existing.id : "msi-"+Date.now();
   const alasan = MS_ITEMS.map(it=>$("#msfAlasan_"+it.key).value.trim());
-  const v = { id, row:null, submittedAt:new Date().toISOString(),
-    email:(currentUser&&(currentUser.user||currentUser.name))||"", source:"input-langsung",
+  const v = { ...(existing||{}), id, row:existing?existing.row:null, submittedAt:existing?existing.submittedAt:new Date().toISOString(),
+    email:existing?existing.email:(currentUser&&(currentUser.user||currentUser.name))||"", source:existing?existing.source||"input-langsung":"input-langsung",
     outlet, outletAsli:outlet, tanggal, waktu:$("#msfWaktu").value, skenario:$("#msfSkenario").value,
     q1:ans.q1,q2:ans.q2,q3:ans.q3,q4:ans.q4,q5:ans.q5,q6:ans.q6,q7:ans.q7,q8:ans.q8,
     score:sc.score, detail:sc.detail, alasan,
     apresiasi:$("#msfApresiasi").value.trim(), gap:$("#msfGap").value.trim(),
-    fotoUrl: msFotoData||"", insanku:$("#msfInsanku").value.trim(),
+    fotoUrl: msFotoData||"", fotoPendingUpload:msFotoPending||undefined, fotoPath:msFotoPath||undefined,
+    insanku:$("#msfInsanku").value.trim(),
     coaching:$("#msfCoaching").value.trim(), videos, updatedAt:new Date().toISOString() };
   const msTarget = (PARAMS.find(p=>p.id==="mystery_score")||{}).target||85;
   const normalizedVisit = {
@@ -3265,25 +3435,29 @@ async function saveMsForm(){
     status: sc.score===null? "no_data" : normStatus(sc.score, msTarget, "up"),
     finding: sc.score!==null && sc.score<msTarget ? "Mystery Shopper "+fmtVal(sc.score,"")+" — Gap: "+v.gap : "",
     evidence_url: /^https?:/.test(v.fotoUrl)? v.fotoUrl : "",
-    is_repeated:false, period:tanggal.slice(0,7), created_at:new Date().toISOString()
+    is_repeated:false, period:tanggal.slice(0,7), created_at:existing&&existing.submittedAt?existing.submittedAt:new Date().toISOString(),
+    updated_at:new Date().toISOString()
   };
   const btn = $("#btnMsSave");
   btn.disabled = true; btn.textContent = "Menyimpan…";
   try{
     await Promise.all([persistMsVisitDocument(v), persistReviewDataDocument(normalizedVisit)]);
   }catch(err){
-    btn.disabled = false; btn.textContent = "💾 Simpan Kunjungan";
+    btn.disabled = false; btn.textContent = existing ? "💾 Simpan Perubahan" : "💾 Simpan Kunjungan";
     toast("⚠ Kunjungan belum tersimpan: "+(err.message||"koneksi Firestore gagal"));
     return;
   }
-  db.msVisits.push(v);
+  if(existing && existing.fotoUrl && existing.fotoUrl!==v.fotoUrl) gcsDeleteByUrl(existing.fotoUrl);
+  if(existing) db.msVisits[db.msVisits.findIndex(x=>x.id===id)] = v;
+  else db.msVisits.push(v);
   upsertNormalized([normalizedVisit], "mystery");
   const cfg = connCfg("mystery"); if(cfg){ cfg.count = db.msVisits.length; if(cfg.status==="not_integrated") cfg.status="connected"; cfg.lastSync=new Date().toISOString(); }
   save();
   $("#msFormBack").classList.remove("open");
+  editingMsVisitId = null;
   renderMystery();
   btn.disabled = false; btn.textContent = "💾 Simpan Kunjungan";
-  toast("✓ Kunjungan tersimpan — skor "+(sc.score===null?"—":fmtVal(sc.score,"")));
+  toast("✓ Kunjungan "+(existing?"diperbarui":"tersimpan")+" — skor "+(sc.score===null?"—":fmtVal(sc.score,"")));
 }
 async function deleteMsVisit(id){
   if(!isAdmin()){ toast("⚠ Hanya Admin yang dapat menghapus"); return; }
@@ -3303,14 +3477,41 @@ async function deleteMsVisit(id){
   save(); $("#msBack").classList.remove("open"); renderMystery();
   toast("Kunjungan dihapus");
 }
-$("#btnMsAdd") && $("#btnMsAdd").addEventListener("click", openMsForm);
-$("#msFormClose") && $("#msFormClose").addEventListener("click", ()=>$("#msFormBack").classList.remove("open"));
-$("#msFormBack") && $("#msFormBack").addEventListener("click", e=>{ if(e.target===e.currentTarget) $("#msFormBack").classList.remove("open"); });
+$("#btnMsAdd") && $("#btnMsAdd").addEventListener("click", ()=>openMsForm());
+function closeMsForm(){ msFotoUploadSeq++; setMsFotoUploading(false); editingMsVisitId=null; $("#msFormBack").classList.remove("open"); }
+$("#msFormClose") && $("#msFormClose").addEventListener("click", closeMsForm);
+$("#msFormBack") && $("#msFormBack").addEventListener("click", e=>{ if(e.target===e.currentTarget) closeMsForm(); });
 $("#btnMsSave") && $("#btnMsSave").addEventListener("click", saveMsForm);
+$("#msfFotoRemove") && $("#msfFotoRemove").addEventListener("click", ()=>{
+  msFotoUploadSeq++;
+  setMsFotoUploading(false);
+  msFotoData = "";
+  msFotoPending = false;
+  msFotoPath = null;
+  msFotoUploadFailed = false;
+  const preview = $("#msfFotoPrev");
+  preview.removeAttribute("src"); preview.style.display = "none";
+  $("#msfFoto").value = "";
+  $("#msfFotoRemove").style.display = "none";
+});
 $("#msfFoto") && $("#msfFoto").addEventListener("change", e=>{
   const f=e.target.files[0]; if(!f) return;
-  processPhoto(f, (data)=>{ msFotoData=data; const p=$("#msfFotoPrev"); p.src=data; p.style.display="block"; },
-    {kind:"struk-mystery", itemId:"ms", outlet:$("#msfOutlet").value||"outlet"});
+  const uploadSeq = ++msFotoUploadSeq;
+  msFotoUploadFailed = false;
+  setMsFotoUploading(true);
+  processPhoto(f, (data,st)=>{
+    if(uploadSeq!==msFotoUploadSeq){ if(/^https?:/.test(data)) gcsDeleteByUrl(data); return; }
+    msFotoData=data; msFotoPending=false; msFotoPath=(st&&st.path)||null; msFotoUploadFailed=false;
+    const p=$("#msfFotoPrev"); p.src=data; p.style.display="block";
+    $("#msfFotoRemove").style.display="inline-flex";
+    setMsFotoUploading(false);
+  }, {kind:"struk-mystery", itemId:editingMsVisitId||"baru", outlet:$("#msfOutlet").value||"outlet"}, error=>{
+    if(uploadSeq!==msFotoUploadSeq) return;
+    msFotoUploadFailed=true;
+    setMsFotoUploading(false);
+    $("#msfFoto").value="";
+    toast("⚠ Upload foto struk gagal: "+(error.message||"silakan pilih ulang"));
+  });
 });
 
 /* ---- MYSTERY SHOPPER: skoring & adapter ----
@@ -3361,7 +3562,7 @@ function msMatchVideos(outletName, videos){
   const words = core.split(" ").filter(w=>w.length>=3);
   if(!words.length) return [];
   const need = Math.max(1, Math.ceil(words.length/2));
-  return (videos||[]).filter(f=>{
+  return validMsVideos(videos).filter(f=>{
     const fn = String(f.name||"").toLowerCase().replace(/[^a-z0-9 ]/g," ");
     return words.filter(w=>fn.includes(w)).length >= need;
   }).map(f=>({name:f.name, url:f.url}));
